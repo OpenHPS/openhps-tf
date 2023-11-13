@@ -1,0 +1,16 @@
+node_modules/
+dist/
+docs/out/
+coverage/
+artifacts/
+src/three/
+.nyc_output/
+.cache/
+test-results.xml
+examples/**/public/*openhps-core*
+examples/**/package-lock.json
+xunit.xml
+
+# Linked Software Dependencies
+components/**/*.jsonld
+config/**/*.json
