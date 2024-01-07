@@ -1,0 +1,23 @@
+version: '2.3'
+services:
+  tensorflow:
+    build:
+      context: docker
+      dockerfile: Dockerfile
+      args:
+        - NUM_THREADS=8
+        - NODEJS_MAJOR_VERSION=20
+        - UBUNTU_VERSION=20.04
+    container_name: 'tensorflow'
+    volumes: 
+    - ./:/opt/app
+    - node_modules:/opt/app/node_modules/
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+volumes:
+  node_modules:

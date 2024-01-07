@@ -1,36 +1,36 @@
 <h1 align="center">
   <img alt="OpenHPS" src="https://openhps.org/images/logo_text-512.png" width="40%" /><br />
-  @openhps/rf
+  @openhps/tf
 </h1>
 <p align="center">
-    <a href="https://github.com/OpenHPS/openhps-rf/actions/workflows/main.yml" target="_blank">
-        <img alt="Build Status" src="https://github.com/OpenHPS/openhps-rf/actions/workflows/main.yml/badge.svg">
+    <a href="https://github.com/OpenHPS/openhps-tf/actions/workflows/main.yml" target="_blank">
+        <img alt="Build Status" src="https://github.com/OpenHPS/openhps-tf/actions/workflows/main.yml/badge.svg">
     </a>
-    <a href="https://codecov.io/gh/OpenHPS/openhps-rf">
+    <a href="https://codecov.io/gh/OpenHPS/openhps-tf">
         <img src="https://codecov.io/gh/OpenHPS/openhps-rf/branch/master/graph/badge.svg"/>
     </a>
-    <a href="https://codeclimate.com/github/OpenHPS/openhps-rf/" target="_blank">
-        <img alt="Maintainability" src="https://img.shields.io/codeclimate/maintainability/OpenHPS/openhps-rf">
+    <a href="https://codeclimate.com/github/OpenHPS/openhps-tf/" target="_blank">
+        <img alt="Maintainability" src="https://img.shields.io/codeclimate/maintainability/OpenHPS/openhps-tf">
     </a>
-    <a href="https://badge.fury.io/js/@openhps%2Frf">
-        <img src="https://badge.fury.io/js/@openhps%2Frf.svg" alt="npm version" height="18">
+    <a href="https://badge.fury.io/js/@openhps%2Ftf">
+        <img src="https://badge.fury.io/js/@openhps%2Ftf.svg" alt="npm version" height="18">
     </a>
 </p>
 
 <h3 align="center">
-    <a href="https://github.com/OpenHPS/openhps-core">@openhps/core</a> &mdash; <a href="https://openhps.org/docs/rf">API</a>
+    <a href="https://github.com/OpenHPS/openhps-core">@openhps/core</a> &mdash; <a href="https://openhps.org/docs/tf">API</a>
 </h3>
 
 <br />
 
 ## Getting Started
-If you have [npm installed](https://www.npmjs.com/get-npm), start using @openhps/video with the following command.
+If you have [npm installed](https://www.npmjs.com/get-npm), start using @openhps/tf with the following command.
 ```bash
-npm install @openhps/rf --save
+npm install @openhps/tf --save
 ```
 
 ## Usage
-The RF module offers data objects and data frames for RF based data.
+
 
 ## Contributors
 The framework is open source and is mainly developed by PhD Student Maxim Van de Wynckel as part of his research towards *Hybrid Positioning and Implicit Human-Computer Interaction* under the supervision of Prof. Dr. Beat Signer.
