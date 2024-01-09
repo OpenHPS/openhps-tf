@@ -4,6 +4,21 @@ import * as fs from 'fs';
 
 export type SignalStrenghts = { [key: `WAP_${number}`]: number };
 
+function rssiLoss(yTrue: tf.Tensor, yPred: tf.Tensor) {
+    return tf.tidy(() => {
+        const zeros = tf.zerosLike(yTrue);
+        const nonZeroIndices = yTrue.notEqual(zeros);
+        const zeroIndices = yTrue.equal(zeros);
+
+        const zerosTrue = yTrue.where(zeroIndices, yTrue);
+        const nonZerosTrue = yTrue.where(nonZeroIndices, yTrue);
+        const zerosPred = yPred.where(zeroIndices, yPred);
+        const nonZerosPred = yPred.where(nonZeroIndices, yPred);
+        return zerosTrue.sum().sub(zerosPred.sum()).abs().div(zeroIndices.sum()).add(
+            nonZerosTrue.sum().sub(nonZerosPred.sum()).abs().square().div(nonZeroIndices.sum()));
+    });
+}
+
 export class AccuracyModel {
     protected encoder: tf.Sequential;
     protected decoder: tf.Sequential;
@@ -17,6 +32,14 @@ export class AccuracyModel {
     constructor(options: AccuracyModelOptions) {
         this.options = options;
         this.createModels();
+    }
+
+    private get inputDimension(): number {
+        if (this.options.accessPoints.length <= 256) {
+            return 16;
+        } else if (this.options.accessPoints.length <= 1024) {
+            return 32;
+        }
     }
 
     load(directory: string): Promise<void> {
@@ -56,14 +79,16 @@ export class AccuracyModel {
                         return tf.loadLayersModel(`file://${rssiModelPath}/model.json`);
                     }).then((rssiModel) => {
                         this.rssiModel = rssiModel as tf.Sequential;
+                        this.options = JSON.parse(fs.readFileSync(path.join(directory, 'options.json'), 'utf-8'));
 
-                        const input1 = tf.input({ shape: [16 * 16] });
+                        const input1 = tf.input({ shape: [this.inputDimension * this.inputDimension] });
                         const input2 = tf.input({ shape: [4] });
                         this.encoder.layers[0].apply(input1 as tf.SymbolicTensor);
 
                         const merge = tf.layers.concatenate({ axis: 1, inputShape: [ 4 * 4 * 64 ] });
                         merge.apply([this.model1.output as tf.SymbolicTensor, input2 as tf.SymbolicTensor]);
                         this.accuracyModel = tf.sequential({ layers: [ merge, this.model2 ] });
+                        
                         this.compile();
                         resolve();
                     })
@@ -90,6 +115,7 @@ export class AccuracyModel {
                 this.autoencoder.save(`file://${autoencoderPath}`),
                 this.rssiModel.save(`file://${rssiModelPath}`)
             ]).then(() => {
+                fs.writeFileSync(path.join(directory, 'options.json'), JSON.stringify(this.options));
                 resolve();
             }).catch(reject);
         });
@@ -98,7 +124,7 @@ export class AccuracyModel {
     protected compile(): void {
         this.autoencoder.compile({
             optimizer: tf.train.adam(1e-4),
-            loss: tf.losses.meanSquaredError,
+            loss: rssiLoss,
             metrics: [ tf.metrics.meanSquaredError]
         });
         this.accuracyModel.compile({
@@ -110,15 +136,15 @@ export class AccuracyModel {
         });
         this.rssiModel.compile({
             optimizer: tf.train.adam(1e-4),
-            loss: tf.losses.meanSquaredError,
+            loss: rssiLoss,
             metrics: [ 'accuracy' ]
         });
     }
 
-    private _normalizeRSSI(rssi: number[]): number[] {
+    private _normalizeRSSI(rssi: number[], min: number, max: number): number[] {
         const normalized = rssi.map(f => {
             return f === 100 ? 0 : (f + 99) / 99;
-        }).concat(Array((16 * 16) - rssi.length).fill(0));
+        }).concat(Array((Math.pow(this.inputDimension, 2)) - rssi.length).fill(0));
         return normalized;
     }
 
@@ -130,31 +156,38 @@ export class AccuracyModel {
         };
 
         // Input dimensions
-        const input1 = tf.input({ shape: [ 16 * 16 ] });
         const input2 = tf.input({ shape: [ 4 ] });
-        
+        const inputSize = this.inputDimension;
+
         // CNN Encoder
         this.encoder = tf.sequential({ name: 'encoder' });
         this.encoder.add(tf.layers.reshape({ 
-            targetShape: [ 16, 16, 1 ], 
-            inputShape: [ 16 * 16 ]
+            targetShape: [ inputSize, inputSize, 1 ], 
+            inputShape: [ inputSize * inputSize ]
         }));
         this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 32, kernelSize: [3, 3], padding: 'same' }));
         this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same' }));
         this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));
-        this.encoder.layers[0].apply(input1 as tf.SymbolicTensor);
-        
+        if (inputSize === 32) {
+            this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+            this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));    
+        }
+
         // CNN Decoder
         this.decoder = tf.sequential({ name: 'decoder' });
         this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same', inputShape: [4, 4, 128] }));
+        if (inputSize === 32) {
+            this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
+            this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));
+        }
         this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
         this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same' }));
         this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
         this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 32, kernelSize: [3, 3], padding: 'same' }));
         this.decoder.add(tf.layers.flatten());
-        this.decoder.add(tf.layers.dense({ activation: 'relu', units: 16 * 16 }));
+        this.decoder.add(tf.layers.dense({ activation: 'relu', units: inputSize * inputSize }));
 
         // CNN Autoencoder
         this.autoencoder = tf.sequential({ 
@@ -194,7 +227,6 @@ export class AccuracyModel {
         this.rssiModel.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same' }));
         this.rssiModel.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));
         this.rssiModel.add(this.decoder);
-
         this.compile();
     }
 
@@ -203,22 +235,35 @@ export class AccuracyModel {
             const x = [];
             const y = [];
             // Prepare the data
-            data.xs.forEach((input, index) => {
-                const fingerprint = {};
-                this.options.accessPoints.forEach((ap) => {
-                    fingerprint[ap] = input.fingerprint[ap] || 100;
+            let min = -99;
+            let max = 0;
+            this.options.minRSSI = min;
+            this.options.maxRSSI = max;
+            data.xs.forEach((input) => {
+                Object.values(input.fingerprint).forEach((rssi) => {
+                    if (rssi !== 100) {
+                        min = Math.max(min, rssi);
+                        max = Math.min(max, rssi);
+                    }
                 });
-                x.push(this._normalizeRSSI(Object.values(fingerprint)));
-                y.push(this._normalizeRSSI(Object.values(fingerprint)));
             });
-            // Add random noise (n=0.2)
-            data.xs.forEach((input, index) => {
+            data.xs.forEach((input) => {
                 const fingerprint = {};
                 this.options.accessPoints.forEach((ap) => {
                     fingerprint[ap] = input.fingerprint[ap] || 100;
                 });
-                x.push(this._normalizeRSSI(Object.values(fingerprint)).map(f => f + Math.random() * 0.2));
-                y.push(this._normalizeRSSI(Object.values(fingerprint)).map(f => f + Math.random() * 0.2));
+                x.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
+                y.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
+            });
+
+            // Add random noise (n=0.2)
+            data.xs.forEach((input) => {
+                const fingerprint = {};
+                this.options.accessPoints.forEach((ap) => {
+                    fingerprint[ap] = input.fingerprint[ap] || 100;
+                });
+                x.push(this._normalizeRSSI(Object.values(fingerprint), min, max).map(f => f + Math.random() * 0.2));
+                y.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
             });
 
             // Enable the training of the encoder
@@ -249,7 +294,7 @@ export class AccuracyModel {
                     this.options.accessPoints.forEach((ap) => {
                         fingerprint[ap] = input.fingerprint[ap] || 100;
                     });
-                    x.push(this._normalizeRSSI(Object.values(fingerprint)));
+                    x.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
                     x2.push([input.x, input.y, input.z ?? 0, input.k]);
                     y.push(data.ys[index]);
                 });
@@ -260,8 +305,8 @@ export class AccuracyModel {
                     validationSplit: 0.2,
                     callbacks: {
                         onEpochEnd: (epoch, logs) => {
-                            const loss = logs.loss.toFixed(4);
-                            console.log(`CNN | Epoch ${epoch} - Loss: ${loss}`);
+                            const loss = logs.val_.toFixed(4);
+                            console.log(`CNN | Epoch ${epoch} - Accuracy: ${loss}m`);
                         }
                     }
                 });
@@ -274,7 +319,7 @@ export class AccuracyModel {
                         fingerprint[ap] = input.fingerprint[ap] || 100;
                     });
                     x.push([input.x, input.y, input.z ?? 0]);
-                    y.push(this._normalizeRSSI(Object.values(fingerprint)));
+                    y.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
                 });
                 return this.rssiModel.fit(tf.tensor(x), tf.tensor(y), {
                     epochs,
@@ -301,22 +346,24 @@ export class AccuracyModel {
         });
         const prediction = this.accuracyModel.predict(
             [
-                tf.tensor([this._normalizeRSSI(Object.values(fingerprint))]), 
+                tf.tensor([this._normalizeRSSI(Object.values(fingerprint), this.options.minRSSI, this.options.maxRSSI)]), 
                 tf.tensor([[input.x, input.y, input.z ?? 0, input.k]])
             ]) as tf.Tensor;
         return prediction.dataSync()[0];
     }
 
     predictRSSI(x: number, y: number, z: number): SignalStrenghts {
-        const signalStrengths: SignalStrenghts = {
-
-        };
+        const signalStrengths: SignalStrenghts = {};
         const prediction = this.rssiModel.predict(
-            tf.tensor([x, y, z])
+            tf.tensor([[x, y, z]])
         ) as tf.Tensor;
-        const predictionData = prediction.dataSync();
+        const predictionData = Array.from(prediction.dataSync());
+        const normalizedData = predictionData.map(f => {
+            return Math.round(f === 0 ? 100 : (f * 99) - 99);
+        });
         this.options.accessPoints.forEach((ap ,i) => {
-            
+            const rssi = normalizedData[i];
+            signalStrengths[ap] = rssi;
         });
         return signalStrengths;
     }
@@ -337,4 +384,6 @@ export interface AccuracyModelData {
 
 export interface AccuracyModelOptions {
     accessPoints: string[];
+    minRSSI?: number;
+    maxRSSI?: number;
 }

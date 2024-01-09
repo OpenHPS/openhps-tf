@@ -1,12 +1,12 @@
 import 'mocha';
 import * as fs from 'fs';
 import * as csv from 'csv-parser';
-import { Absolute2DPosition, AbsolutePosition, Vector3 } from '@openhps/core';
-import { DistanceFunction, WeightFunction, KDTree, Fingerprint } from '@openhps/fingerprinting';
+import { Vector3 } from '@openhps/core';
 import { expect } from 'chai';
 import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyModel';
+import { Fingerprinting } from '../Fingerprinting';
 
-const epochs = 1;
+const epochs = 5;
 
 describe('data.openhps.accuracy', () => {
     const trainData: any[] = [];
@@ -14,9 +14,8 @@ describe('data.openhps.accuracy', () => {
     const testData: any[] = [];
     const rawTestData: any[] = [];
     const accessPoints: string[] = [];
-    const fingerprints = Array<{ rssi: SignalStrenghts, x: number, y: number }>();
+    let fingerprinting: Fingerprinting = new Fingerprinting();
     let model: AccuracyModel;
-    let tree: KDTree;
 
     function loadData(path: string, array: any[]): Promise<void> {
         return new Promise((resolve) => {
@@ -47,53 +46,6 @@ describe('data.openhps.accuracy', () => {
         return loadData('test/data/OpenHPS-2021-05/test/raw/wlan_fingerprints.csv', rawTestData);
     }
 
-    function fingerprinting(k: number, data: SignalStrenghts, weighted: boolean = false, naive: boolean = false): Vector3 {
-        const dataObjectPoint: number[] = [];
-        Object.keys(data)
-            // Sort alphabetically
-            .sort((a, b) =>
-                a.localeCompare(b),
-            )
-            .forEach((rel) => {
-                dataObjectPoint.push(data[rel]);
-            });
-        // Perform reverse fingerprinting
-        let results = new Array<[AbsolutePosition, number]>();
-        if (naive) {
-            fingerprints.forEach((f) => {
-                let distance = DistanceFunction.EUCLIDEAN(dataObjectPoint, Object.values(f.rssi));
-                if (distance === 0) {
-                    distance = 1e-5;
-                }
-                results.push([new Absolute2DPosition(f.x, f.y), distance]);
-            });
-            results = results
-                // Sort by euclidean distance
-                .sort((a, b) => a[1] - b[1])
-                // Only the first K neighbours
-                .splice(0, k);
-        } else {
-            results = tree.nearest(dataObjectPoint, k);
-        }
-
-        const point: Vector3 = new Vector3(0, 0, 0);
-        if (weighted) {
-            let scale = 0;
-            results.forEach((sortedFingerprint) => {
-                const weight = WeightFunction.SQUARE(sortedFingerprint[1]);
-                scale += weight;
-                point.add(sortedFingerprint[0].toVector3().multiplyScalar(weight));
-            });
-            point.divideScalar(scale);
-        } else {
-            results.forEach((sortedFingerprint) => {
-                point.add(sortedFingerprint[0].toVector3());
-            });
-            point.divideScalar(k);
-        }
-        return point;
-    }
-
     before((done) => {
         loadTrainData().then(() => {
             return loadTestData();
@@ -116,6 +68,7 @@ describe('data.openhps.accuracy', () => {
                  }
             });
             // Create fingerprints
+            const fingerprints = [];
             trainData.forEach((data) => {
                 const fingerprint: { rssi: SignalStrenghts, x: number, y: number } = { rssi: {}, x: parseFloat(data.X), y: parseFloat(data.Y) };
                 accessPoints.forEach((col) => {
@@ -123,16 +76,7 @@ describe('data.openhps.accuracy', () => {
                 });
                 fingerprints.push(fingerprint);
             });
-            // Create KD-tree
-            tree = new KDTree(fingerprints.map(f => {
-                const fingerprint = new Fingerprint();
-                Object.keys(f.rssi).forEach(key => {
-                    fingerprint.addFeature(key, f.rssi[key]);
-                });
-                fingerprint.setPosition(new Absolute2DPosition(f.x, f.y));
-                fingerprint.computeVector((val) => val.reduce((a, b) => a + b, 0) / val.length);
-                return fingerprint;
-            }), DistanceFunction.EUCLIDEAN);
+            fingerprinting.load(fingerprints);
 
             const accessPointPerScan = rawTrainData.map(d => {
                 let count = 0;
@@ -172,14 +116,13 @@ describe('data.openhps.accuracy', () => {
         it('should perform kNN fingerprinting', (done) => {
             const k = 3;
             const weighted = true;
-            const naive = true;
             const results = [];
             testData.forEach((data) => {
                 const signalStrengths: SignalStrenghts = {};
                 accessPoints.forEach((col) => {
                     signalStrengths[col] = parseFloat(data[col]);
                 });
-                const point = fingerprinting(k, signalStrengths, weighted, naive);
+                const point = fingerprinting.calc(k, signalStrengths, weighted);
                 results.push(point);
                 expect(point.x).to.not.be.NaN;
                 expect(point.y).to.not.be.NaN;
@@ -195,13 +138,13 @@ describe('data.openhps.accuracy', () => {
                 xs: [],
                 ys: [],
             };
-            for (let k = 1; k < 5; k++) {
+            for (let k = 1; k <= 5; k++) {
                 rawTrainData.forEach((data) => {
                     const signalStrengths: SignalStrenghts = {};
                     accessPoints.forEach((col) => {
                         signalStrengths[col] = parseFloat(data[col]);
                     });
-                    const point = fingerprinting(k, signalStrengths, true, false);
+                    const point = fingerprinting.calc(k, signalStrengths, true);
                     trainDataObject.xs.push({
                         fingerprint: signalStrengths,
                         x: point.x,
@@ -221,14 +164,14 @@ describe('data.openhps.accuracy', () => {
 
     describe('prediction', () => {	
         it('should predict the fingerprinting accuracy', (done) => {
-            for (let k = 1; k < 5; k++) {
+            for (let k = 1; k <= 5; k++) {
                 const diffXYList = [];
                 testData.forEach((data) => {
                     const signalStrengths: SignalStrenghts = {};
                     accessPoints.forEach((col) => {
                         signalStrengths[col] = parseFloat(data[col]);
                     });
-                    const point = fingerprinting(k, signalStrengths, true, false);
+                    const point = fingerprinting.calc(k, signalStrengths, true);
                     expect(point.x).to.not.be.NaN;
                     expect(point.y).to.not.be.NaN;
                     const distanceX = Math.abs(point.x - parseFloat(data.X));
@@ -254,6 +197,43 @@ describe('data.openhps.accuracy', () => {
                 console.log(``);
             }
            
+            done();
+        });
+
+        it('should predict RSSI values from an X, Y coordinate', (done) => {
+            const diffs = [];
+            testData.forEach((data) => {
+                const signalStrengths: SignalStrenghts = {};
+                accessPoints.forEach((col) => {
+                    signalStrengths[col] = parseFloat(data[col]);
+                });
+                const prediction = model.predictRSSI(parseFloat(data.X), parseFloat(data.Y), 0);
+                accessPoints.forEach((col) => {
+                    expect(prediction[col]).to.not.be.NaN;
+                });
+                const accuracy1 = model.predict({
+                    fingerprint: prediction,
+                    x: parseFloat(data.X),
+                    y: parseFloat(data.Y),
+                    z: 0,
+                    k: 3
+                });
+                const accuracy2 = model.predict({
+                    fingerprint: signalStrengths,
+                    x: parseFloat(data.X),
+                    y: parseFloat(data.Y),
+                    z: 0,
+                    k: 3
+                });
+                const diff = Math.abs(accuracy1 - accuracy2);
+                diffs.push(diff);
+            });
+            const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+            const maxDiff = diffs.reduce((a, b) => Math.max(a, b), 0);
+            const minDiff = diffs.reduce((a, b) => Math.min(a, b), 0);
+            console.log(`Average diff: ${avgDiff}`);
+            console.log(`Max diff: ${maxDiff}`);
+            console.log(`Min diff: ${minDiff}`);
             done();
         });
     });
