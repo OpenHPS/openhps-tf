@@ -6,7 +6,7 @@ import { expect } from 'chai';
 import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyModel';
 import { Fingerprinting } from '../Fingerprinting';
 
-const epochs = 5;
+const epochs = 10;
 
 describe('data.openhps.accuracy', () => {
     const trainData: any[] = [];
@@ -138,7 +138,7 @@ describe('data.openhps.accuracy', () => {
                 xs: [],
                 ys: [],
             };
-            for (let k = 1; k <= 5; k++) {
+            for (let k = 1; k <= 10; k++) {
                 rawTrainData.forEach((data) => {
                     const signalStrengths: SignalStrenghts = {};
                     accessPoints.forEach((col) => {
@@ -164,7 +164,7 @@ describe('data.openhps.accuracy', () => {
 
     describe('prediction', () => {	
         it('should predict the fingerprinting accuracy', (done) => {
-            for (let k = 1; k <= 5; k++) {
+            for (let k = 1; k <= 10; k++) {
                 const diffXYList = [];
                 testData.forEach((data) => {
                     const signalStrengths: SignalStrenghts = {};

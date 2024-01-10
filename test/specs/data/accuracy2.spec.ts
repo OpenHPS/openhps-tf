@@ -162,7 +162,7 @@ describe('data.ujiindoorloc.accuracy', () => {
                 xs: [],
                 ys: [],
             };
-            for (let k = 3; k <= 3; k++) {
+            for (let k = 1; k <= 5; k++) {
                 trainData.forEach((data, index) => {
                     const signalStrengths: SignalStrenghts = {};
                     accessPoints.forEach((col) => {
@@ -189,7 +189,7 @@ describe('data.ujiindoorloc.accuracy', () => {
 
     describe('prediction', () => {	
         it('should predict the fingerprinting accuracy', (done) => {
-            for (let k = 3; k <= 3; k++) {
+            for (let k = 1; k <= 5; k++) {
                 const diffXYList = [];
                 testData.forEach((data) => {
                     const signalStrengths: SignalStrenghts = {};

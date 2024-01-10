@@ -46,48 +46,54 @@ export class AccuracyModel {
         return new Promise((resolve, reject) => {
             const encoderPath = path.join(directory, 'encoder');
             const decoderPath = path.join(directory, 'decoder');
-            const model1Path = path.join(directory, 'model1');
             const model2Path = path.join(directory, 'model2');
-            const autoencoderPath = path.join(directory, 'autoencoder');
+            const model1Path = path.join(directory, 'accuracyModel');
             const rssiModelPath = path.join(directory, 'rssiModel');
             if (fs.existsSync(`${encoderPath}/model.json`)) {
                 tf.loadLayersModel(`file://${encoderPath}/model.json`)
-                    .then((encoder) => {
-                        this.encoder = encoder as tf.Sequential;
+                    .then((model) => {
+                        this.encoder = model as tf.Sequential;
                         return tf.loadLayersModel(`file://${decoderPath}/model.json`);
                     })
-                    .then((decoder) => {
-                        this.decoder = decoder as tf.Sequential;
-                        return tf.loadLayersModel(`file://${model2Path}/model.json`);
-                    })
                     .then((model) => {
-                        this.model2 = model as tf.Sequential;
+                        this.decoder = model as tf.Sequential;
                         return tf.loadLayersModel(`file://${model1Path}/model.json`);
                     })
-                    .then((model1) => {
-                        const model1Input = tf.layers.conv2d({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same', inputShape: [ 4, 4, 128 ] });
-                        model1Input.apply(this.encoder.output);
-                        model1Input.setWeights(model1.layers[0].getWeights());
-                        this.model1 = tf.sequential({ layers: [
-                            model1Input,
-                            tf.layers.flatten(),
-                        ]});
-                        return tf.loadLayersModel(`file://${autoencoderPath}/model.json`);
-                    })
-                    .then((autoencoder) => {
-                        this.autoencoder = autoencoder as tf.Sequential;
+                    .then((model) => {
+                        this.model1 = model as tf.Sequential;
                         return tf.loadLayersModel(`file://${rssiModelPath}/model.json`);
-                    }).then((rssiModel) => {
-                        this.rssiModel = rssiModel as tf.Sequential;
+                    }).then((model) => {
+                        this.rssiModel = model as tf.Sequential;
+                        return tf.loadLayersModel(`file://${model2Path}/model.json`);
+                    }).then((model) => {
+                        this.model2 = model as tf.Sequential;
                         this.options = JSON.parse(fs.readFileSync(path.join(directory, 'options.json'), 'utf-8'));
+
+                        this.autoencoder = tf.sequential({ 
+                            layers: [
+                                this.encoder, 
+                                tf.layers.dropout({ rate: 0.2 }), 
+                                this.decoder
+                            ] 
+                        });
 
                         const input1 = tf.input({ shape: [this.inputDimension * this.inputDimension] });
                         const input2 = tf.input({ shape: [4] });
                         this.encoder.layers[0].apply(input1 as tf.SymbolicTensor);
 
-                        const merge = tf.layers.concatenate({ axis: 1, inputShape: [ 4 * 4 * 64 ] });
-                        merge.apply([this.model1.output as tf.SymbolicTensor, input2 as tf.SymbolicTensor]);
-                        this.accuracyModel = tf.sequential({ layers: [ merge, this.model2 ] });
+                        const modelInput = tf.layers.conv2d({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same', inputShape: [ 4, 4, 128 ] });
+                        modelInput.apply(this.encoder.output);
+                        modelInput.setWeights(this.model2.layers[0].getWeights());
+                        this.model2 = tf.sequential({
+                            layers: [
+                                modelInput,
+                                ...this.model2.layers.slice(1)
+                            ]
+                        });
+                        
+                        const merge = tf.layers.concatenate({ axis: 1 });
+                        merge.apply([this.model2.output as tf.SymbolicTensor, input2 as tf.SymbolicTensor]);
+                        this.accuracyModel = tf.sequential({ layers: [ merge, this.model1 ] });
                         
                         this.compile();
                         resolve();
@@ -104,16 +110,14 @@ export class AccuracyModel {
             const encoderPath = path.join(directory, 'encoder');
             const decoderPath = path.join(directory, 'decoder');
             const model2Path = path.join(directory, 'model2');
-            const model1Path = path.join(directory, 'model1');
-            const autoencoderPath = path.join(directory, 'autoencoder');
+            const model1Path = path.join(directory, 'accuracyModel');
             const rssiModelPath = path.join(directory, 'rssiModel');
             Promise.all([
                 this.encoder.save(`file://${encoderPath}`),
                 this.decoder.save(`file://${decoderPath}`),
-                this.model2.save(`file://${model2Path}`),
                 this.model1.save(`file://${model1Path}`),
-                this.autoencoder.save(`file://${autoencoderPath}`),
-                this.rssiModel.save(`file://${rssiModelPath}`)
+                this.rssiModel.save(`file://${rssiModelPath}`),
+                this.model2.save(`file://${model2Path}`)
             ]).then(() => {
                 fs.writeFileSync(path.join(directory, 'options.json'), JSON.stringify(this.options));
                 resolve();
@@ -143,18 +147,12 @@ export class AccuracyModel {
 
     private _normalizeRSSI(rssi: number[], min: number, max: number): number[] {
         const normalized = rssi.map(f => {
-            return f === 100 ? 0 : (f + 99) / 99;
+            return f === 100 ? 0 : (f + (-max)) / (99 + min);
         }).concat(Array((Math.pow(this.inputDimension, 2)) - rssi.length).fill(0));
         return normalized;
     }
 
     protected createModels(): void {
-        const autoencoderConfig: tf.ModelCompileArgs = {
-            optimizer: tf.train.adam(1e-4),
-            loss: tf.losses.meanSquaredError,
-            metrics: [ tf.metrics.meanSquaredError]
-        };
-
         // Input dimensions
         const input2 = tf.input({ shape: [ 4 ] });
         const inputSize = this.inputDimension;
@@ -165,10 +163,11 @@ export class AccuracyModel {
             targetShape: [ inputSize, inputSize, 1 ], 
             inputShape: [ inputSize * inputSize ]
         }));
+        this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 16, kernelSize: [3, 3], padding: 'same' }));
+        this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 32, kernelSize: [3, 3], padding: 'same' }));
         this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same' }));
-        this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         this.encoder.add(tf.layers.conv2d({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));
         if (inputSize === 32) {
             this.encoder.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
@@ -177,15 +176,16 @@ export class AccuracyModel {
 
         // CNN Decoder
         this.decoder = tf.sequential({ name: 'decoder' });
-        this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same', inputShape: [4, 4, 128] }));
+        this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same', inputShape: [ 4, 4, 128 ] }));
         if (inputSize === 32) {
             this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
             this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));
         }
-        this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
         this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same' }));
         this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
         this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 32, kernelSize: [3, 3], padding: 'same' }));
+        this.decoder.add(tf.layers.upSampling2d({ size: [2, 2] }));
+        this.decoder.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 16, kernelSize: [3, 3], padding: 'same' }));
         this.decoder.add(tf.layers.flatten());
         this.decoder.add(tf.layers.dense({ activation: 'relu', units: inputSize * inputSize }));
 
@@ -193,37 +193,47 @@ export class AccuracyModel {
         this.autoencoder = tf.sequential({ 
             layers: [
                 this.encoder, 
-                tf.layers.dropout({ rate: 0.7 }), 
+                tf.layers.dropout({ rate: 0.4 }), 
                 this.decoder
             ] 
         });
-        this.autoencoder.compile(autoencoderConfig);
-     
-        const model1Input = tf.layers.conv2d({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same', inputShape: [ 4, 4, 128 ] });
-        model1Input.apply(this.encoder.output);
-        this.model1 = tf.sequential({ layers: [
-            model1Input,
-            tf.layers.flatten(),
-        ]});
 
-        this.model2 = tf.sequential({
+        this.model1 = tf.sequential({
             layers: [
-                tf.layers.dense({ units: 512, activation: 'relu', inputShape: [ 4 * 4 * 64 + 4 ] }),
-                tf.layers.dense({ units: 128, activation: 'relu' }),
+                tf.layers.dense({ units: 512, activation: 'relu', inputShape: [ 256 + 4 ] }),
+                tf.layers.dense({ units: 256, activation: 'relu' }),
                 tf.layers.dropout({ rate: 0.2 }),
                 tf.layers.dense({ units: 128, activation: 'relu' }),
                 tf.layers.dense({ units: 64, activation: 'relu' }),
-                tf.layers.dense({ units: 1, activation: 'relu' })
+                tf.layers.dense({ units: 32, activation: 'relu' }),
+                tf.layers.dense({ units: 1, activation: 'linear' })
+            ]
+        });
+
+        const modelInput = tf.layers.conv2d({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same', inputShape: [ 4, 4, 128 ] });
+        modelInput.apply(this.encoder.output);
+        this.model2 = tf.sequential({
+            layers: [
+                modelInput,
+                tf.layers.avgPooling2d({ poolSize: [2, 2] }),
+                tf.layers.conv2d({ activation: 'relu', filters: 256, kernelSize: [3, 3], padding: 'same' }),
+                tf.layers.avgPooling2d({ poolSize: [2, 2] }),
+                tf.layers.conv2d({ activation: 'relu', filters: 256, kernelSize: [3, 3], padding: 'same' }),
+                tf.layers.flatten(),
             ]
         });
         
-        const merge = tf.layers.concatenate({ axis: 1, inputShape: [ 4 * 4 * 64 ] });
-        merge.apply([this.model1.output as tf.SymbolicTensor, input2 as tf.SymbolicTensor]);
-        this.accuracyModel = tf.sequential({ layers: [ merge, this.model2 ] });
+        const merge = tf.layers.concatenate({ axis: 1 });
+        merge.apply([this.model2.output as tf.SymbolicTensor, input2 as tf.SymbolicTensor]);
+        this.accuracyModel = tf.sequential({ layers: [ merge, this.model1 ] });
 
         this.rssiModel = tf.sequential({ name: 'rssiModel' });
         this.rssiModel.add(tf.layers.dense({ units: 16, activation: 'relu', inputShape: [ 3 ] }));
-        this.rssiModel.add(tf.layers.reshape({ targetShape: [ 4, 4, 1 ] }));
+        this.rssiModel.add(tf.layers.reshape({ targetShape: [ 1, 1, 16 ] }));
+        this.rssiModel.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 16, kernelSize: [3, 3], padding: 'same' }));
+        this.rssiModel.add(tf.layers.upSampling2d({ size: [2, 2] }));
+        this.rssiModel.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 32, kernelSize: [3, 3], padding: 'same' }));
+        this.rssiModel.add(tf.layers.upSampling2d({ size: [2, 2] }));
         this.rssiModel.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 64, kernelSize: [3, 3], padding: 'same' }));
         this.rssiModel.add(tf.layers.conv2dTranspose({ activation: 'relu', filters: 128, kernelSize: [3, 3], padding: 'same' }));
         this.rssiModel.add(this.decoder);
@@ -237,8 +247,6 @@ export class AccuracyModel {
             // Prepare the data
             let min = -99;
             let max = 0;
-            this.options.minRSSI = min;
-            this.options.maxRSSI = max;
             data.xs.forEach((input) => {
                 Object.values(input.fingerprint).forEach((rssi) => {
                     if (rssi !== 100) {
@@ -247,7 +255,18 @@ export class AccuracyModel {
                     }
                 });
             });
+            this.options.minRSSI = min;
+            this.options.maxRSSI = max;
+            
+            const locations: Array<{ x: number, y: number, z: number }> = [];
+
+            // Add the raw data
             data.xs.forEach((input) => {
+                // Add the location if it doesn't exist
+                if (!locations.find(l => l.x === input.x && l.y === input.y && l.z === input.z)) {
+                    locations.push({ x: input.x, y: input.y, z: input.z });
+                }
+
                 const fingerprint = {};
                 this.options.accessPoints.forEach((ap) => {
                     fingerprint[ap] = input.fingerprint[ap] || 100;
@@ -256,8 +275,35 @@ export class AccuracyModel {
                 y.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
             });
 
-            // Add random noise (n=0.2)
-            data.xs.forEach((input) => {
+            // Add the aggregated data on the same X, Y, Z coordinate
+            const aggregatedFingerprints: Array<{ fingerprint: SignalStrenghts }> = [];
+            locations.forEach(location => {
+                const locationFingerprints: Array<{ fingerprint: SignalStrenghts }> = data.xs.filter(f => f.x === location.x && f.y === location.y && f.z === location.z);
+                aggregatedFingerprints.push({
+                    fingerprint: locationFingerprints.reduce((a, b) => {
+                        const rssi: SignalStrenghts = {};
+                        this.options.accessPoints.forEach(col => {
+                            if (a[col]) {
+                                rssi[col] = (a[col] + b.fingerprint[col]) / 2;
+                            } else {
+                                rssi[col] = b.fingerprint[col];
+                            }
+                        });
+                        return rssi;
+                    }, {})
+                });
+            });
+            aggregatedFingerprints.forEach((input) => {
+                const fingerprint = {};
+                this.options.accessPoints.forEach((ap) => {
+                    fingerprint[ap] = input.fingerprint[ap] || 100;
+                });
+                x.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
+                y.push(this._normalizeRSSI(Object.values(fingerprint), min, max));
+            });
+
+            // Add random noise to aggregated fingerprints (n=0.2)
+            aggregatedFingerprints.forEach((input) => {
                 const fingerprint = {};
                 this.options.accessPoints.forEach((ap) => {
                     fingerprint[ap] = input.fingerprint[ap] || 100;
@@ -269,6 +315,13 @@ export class AccuracyModel {
             // Enable the training of the encoder
             this.encoder.trainable = true;
             this.decoder.trainable = true;
+            this.encoder.layers.forEach((layer) => {
+                layer.trainable = true;
+            });
+            this.decoder.layers.forEach((layer) => {
+                layer.trainable = true;
+            });
+            this.compile();
             this.autoencoder.fit(tf.tensor(x), tf.tensor(y), {
                 epochs,
                 verbose: 0,
@@ -284,6 +337,12 @@ export class AccuracyModel {
                 // Disable the training of the encoder
                 this.encoder.trainable = false;
                 this.decoder.trainable = false;
+                this.encoder.layers.forEach((layer) => {
+                    layer.trainable = false;
+                });
+                this.decoder.layers.forEach((layer) => {
+                    layer.trainable = false;
+                });
                 this.compile();
                 // Start training the model
                 const x = [];
@@ -306,7 +365,7 @@ export class AccuracyModel {
                     callbacks: {
                         onEpochEnd: (epoch, logs) => {
                             const loss = logs.val_.toFixed(4);
-                            console.log(`CNN | Epoch ${epoch} - Accuracy: ${loss}m`);
+                            console.log(`CNN | Epoch ${epoch} - Accuracy: ${loss}m - Loss: ${logs.loss.toFixed(4)}`);
                         }
                     }
                 });
@@ -328,8 +387,8 @@ export class AccuracyModel {
                     validationSplit: 0.2,
                     callbacks: {
                         onEpochEnd: (epoch, logs) => {
-                            const accuracy = logs.acc.toFixed(4);
-                            console.log(`RSSI | Epoch ${epoch} - Accuracy: ${accuracy}`);
+                            const loss = logs.loss.toFixed(4);
+                            console.log(`RSSI | Epoch ${epoch} - Loss: ${loss}`);
                         }
                     }
                 });
