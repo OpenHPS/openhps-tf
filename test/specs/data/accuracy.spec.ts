@@ -6,7 +6,7 @@ import { expect } from 'chai';
 import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyModel';
 import { Fingerprinting } from '../Fingerprinting';
 
-const epochs = 10;
+const epochs = 200;
 
 describe('data.openhps.accuracy', () => {
     const trainData: any[] = [];
