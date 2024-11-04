@@ -1,0 +1,27 @@
+{
+    "name": "OpenHPS TensorFlow",
+    "dockerFile": "Dockerfile",
+    "features": {
+        "docker-in-docker": "latest"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "ms-python.python"
+            ]
+        }
+    },
+    "postCreateCommand": "yarn install",
+    "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "runArgs": [
+        "--gpus",
+        "all"
+    ],
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ]
+}

@@ -5,7 +5,7 @@ import { Vector3 } from '@openhps/core';
 import { expect } from 'chai';
 import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyModel';
 import { Fingerprinting } from '../Fingerprinting';
-
+import * as tf from '@tensorflow/tfjs';
 const epochs = 200;
 
 describe('data.openhps.accuracy', () => {
