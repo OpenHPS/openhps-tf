@@ -62,7 +62,7 @@ export class TensorFlowNode<In extends DataFrame, Out extends DataFrame>
                 this.options.tensorFlow.prediction = this.options.tensorFlow.prediction ?? {};
 
                 this.inlets.forEach(inlet => {
-                    
+                    // inlet.inletNode
                 });
                 resolve();
             }).catch(reject);

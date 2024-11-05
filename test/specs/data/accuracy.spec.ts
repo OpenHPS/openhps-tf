@@ -200,6 +200,44 @@ describe('data.openhps.accuracy', () => {
             done();
         });
 
+        it('should predict accuracy from X,Y and save to JSON', (done) => {
+            const results = [];
+            for (let k = 1; k <= 10; k++) {
+            const diffXYList = [];
+            [...testData, ...trainData].forEach((data) => {
+                const signalStrengths: SignalStrenghts = {};
+                accessPoints.forEach((col) => {
+                signalStrengths[col] = parseFloat(data[col]);
+                });
+                const point = fingerprinting.calc(k, signalStrengths, true);
+                expect(point.x).to.not.be.NaN;
+                expect(point.y).to.not.be.NaN;
+                const distanceX = Math.abs(point.x - parseFloat(data.X));
+                const distanceY = Math.abs(point.y - parseFloat(data.Y));
+                const distance = Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
+                const prediction = model.predict({
+                fingerprint: signalStrengths,
+                x: point.x,
+                y: point.y,
+                z: point.z,
+                k
+                });
+                results.push({
+                    x: point.x,
+                    y: point.y,
+                    k,
+                    accuracy: Math.abs(prediction)
+                });
+                diffXYList.push(Math.abs(prediction - distance));
+            });
+            const avgDiffXY = diffXYList.reduce((a, b) => a + b, 0) / diffXYList.length;
+            console.log(`K: ${k}`);
+            console.log(`Average diff XY: ${avgDiffXY}`);
+            }
+            fs.writeFileSync('accuracy_results.json', JSON.stringify(results, null, 2));
+            done();
+        });
+
         it('should predict RSSI values from an X, Y coordinate', (done) => {
             const diffs = [];
             testData.forEach((data) => {

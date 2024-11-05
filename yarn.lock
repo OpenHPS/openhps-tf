@@ -528,10 +528,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@openhps/core@^0.6.8":
-  version "0.6.10"
-  resolved "https://registry.yarnpkg.com/@openhps/core/-/core-0.6.10.tgz#6733638faffb4ff93dce9f3a07b107fc2951a1fd"
-  integrity sha512-i8CdiK2CYojcxLyCmqIMNIIiP4NX7BLSm0QoAToDyvwp6vrzU7hVHwxYluqeSNOzyVlWM/6bjJCcoiro9ex12w==
+"@openhps/core@^0.7.11":
+  version "0.7.11"
+  resolved "https://registry.yarnpkg.com/@openhps/core/-/core-0.7.11.tgz#974d0f94409743d0e4a352a70103aefe4e0a6c7f"
+  integrity sha512-sv1yD/TqRLdRxPXn146ghYAwSm5gbT3s4gOoGiUA2GXmDsOBUwqtu6FhelAbGyIhHsOlJ1Y5XvkN9+idePj4ig==
   dependencies:
     lodash.clonedeep "^4.5.0"
     reflect-metadata ">=0.2.2"
