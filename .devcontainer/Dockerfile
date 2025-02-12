@@ -29,4 +29,5 @@ RUN apt-get install -y git-lfs && \
 # Upgrade pip and install pydot, tensorflow, and tensorflow[wizard]
 RUN apt install python3-pip -y && \
     pip install --upgrade pip && \
-    pip install pydot tensorflow tensorflow[wizard] seaborn matplotlib
+    pip install --ignore-installed PyYAML && \
+    pip install pydot tensorflow tensorflowjs[wizard] seaborn matplotlib scipy visualkeras

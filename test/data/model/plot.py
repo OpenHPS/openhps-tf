@@ -1,11 +1,11 @@
 import tensorflow as tf
-from tensorflow.keras.utils import plot_model
 import os
+import visualkeras
 
-# Load the model from the .pb file using tf.saved_model.load
+# Load the model from the .h5 file using keras.models.load_model
 current_dir = os.path.dirname(__file__)
-model_file = os.path.join(current_dir, 'model.H5')
+model_file = os.path.join(current_dir, 'test.h5')
 model = tf.keras.models.load_model(model_file)
-
-# Plot the model
-plot_model(model, to_file=os.path.join(current_dir, 'output/model_plot.png'), show_shapes=True, show_layer_names=True)
+model.build()
+model.summary()
+visualkeras.layered_view(model, to_file=os.path.join(current_dir, 'model_visualization.png'))

@@ -9,7 +9,8 @@
             "extensions": [
                 "dbaeumer.vscode-eslint",
                 "esbenp.prettier-vscode",
-                "ms-python.python"
+                "ms-python.python",
+                "jock.svg"
             ]
         }
     },
