@@ -6,7 +6,10 @@ from collections import defaultdict
 from scipy.interpolate import griddata
 import os
 from matplotlib.ticker import MaxNLocator
-
+from matplotlib.colors import LinearSegmentedColormap
+# Define a single gradient color palette for accuracy in metres, darker green without white
+colors = ["#e5f5e0", "#c7e9c0", "#a1d99b", "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b"]
+cmap = LinearSegmentedColormap.from_list("accuracy_palette", colors)
 def plot_heatmaps(interpolation_method='cubic', interpolate=True):
     # Load the data from the JSON file
     with open('accuracy_results.json', 'r') as f:
@@ -72,7 +75,6 @@ def plot_heatmaps(interpolation_method='cubic', interpolate=True):
         ax.set_xlim(0, x_max)
         ax.set_ylim(0, y_max)
         
-        cmap = sns.color_palette("RdYlGn_r", as_cmap=True)
         sns.heatmap(heatmap, mask=mask, cmap=cmap, cbar=False, vmin=0, vmax=10, ax=ax)
         ax.invert_yaxis()  # Invert the y-axis to match the image orientation
         # Display the image on top of the heatmap
