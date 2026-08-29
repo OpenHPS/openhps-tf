@@ -3,10 +3,13 @@ import * as fs from 'fs';
 import * as csv from 'csv-parser';
 import { Vector3 } from '@openhps/core';
 import { expect } from 'chai';
-import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyModel';
+import { ensureBackend } from '../../tf';
+import { AccuracyModel, AccuracyModelData, AccuracyModelInput, SignalStrenghts } from '../AccuracyModel';
 import { Fingerprinting } from '../Fingerprinting';
 import * as tf from '@tensorflow/tfjs';
-const epochs = 200;
+const epochs = process.env.EPOCHS ? parseInt(process.env.EPOCHS, 10) : 200;
+const modelDir = process.env.MODEL_DIR ?? "test/data/model";
+const ensembleSize = process.env.ENSEMBLE ? parseInt(process.env.ENSEMBLE, 10) : 1;
 
 describe('data.openhps.accuracy', () => {
     const trainData: any[] = [];
@@ -15,7 +18,16 @@ describe('data.openhps.accuracy', () => {
     const rawTestData: any[] = [];
     const accessPoints: string[] = [];
     let fingerprinting: Fingerprinting = new Fingerprinting();
-    let model: AccuracyModel;
+    let models: AccuracyModel[] = [];
+
+    // Average prediction over the ensemble members (ENSEMBLE=1 => single model).
+    async function ensemblePredict(input: AccuracyModelInput): Promise<number> {
+        let sum = 0;
+        for (const m of models) {
+            sum += await m.predict(input);
+        }
+        return sum / models.length;
+    }
 
     function loadData(path: string, array: any[]): Promise<void> {
         return new Promise((resolve) => {
@@ -47,7 +59,7 @@ describe('data.openhps.accuracy', () => {
     }
 
     before((done) => {
-        loadTrainData().then(() => {
+        ensureBackend().then(() => loadTrainData()).then(() => {
             return loadTestData();
         }).then(() => {
             return loadRawTestData();
@@ -96,18 +108,20 @@ describe('data.openhps.accuracy', () => {
             console.log(`Average access points per scan: ${avgAccessPointsPerScan}`);
             console.log(`Max access points per scan: ${maxAccessPointsPerScan}`);
 
-            model = new AccuracyModel({
-                accessPoints,
-            });
-            return model.load("test/data/model");
+            models = Array.from({ length: ensembleSize }, () => new AccuracyModel({
+                accessPoints
+            }));
+            return Promise.all(models.map((m, i) =>
+                m.load(i === 0 ? modelDir : `${modelDir}_${i}`)));
         }).then(() => {
             done();
         }).catch(done);
     });
 
     after((done) => {
-        // Save the model
-        model.save("test/data/model").then(() => {
+        // Save the model(s); ensemble member i > 0 goes to modelDir_i.
+        Promise.all(models.map((m, i) =>
+            m.save(i === 0 ? modelDir : `${modelDir}_${i}`))).then(() => {
             done();
         }).catch(done);
     });
@@ -156,17 +170,21 @@ describe('data.openhps.accuracy', () => {
                     trainDataObject.ys.push(accuracy);
                 });
             }
-            model.train(trainDataObject, epochs).then(() => {
+            let trainChain: Promise<void> = Promise.resolve();
+            models.forEach((model) => {
+                trainChain = trainChain.then(() => model.train(trainDataObject, epochs));
+            });
+            trainChain.then(() => {
                 done();
             }).catch(done);
         }).timeout(-1);
     });
 
     describe('prediction', () => {	
-        it('should predict the fingerprinting accuracy', (done) => {
+        it('should predict the fingerprinting accuracy', async () => {
             for (let k = 1; k <= 10; k++) {
                 const diffXYList = [];
-                testData.forEach((data) => {
+                for (const data of testData) {
                     const signalStrengths: SignalStrenghts = {};
                     accessPoints.forEach((col) => {
                         signalStrengths[col] = parseFloat(data[col]);
@@ -177,7 +195,7 @@ describe('data.openhps.accuracy', () => {
                     const distanceX = Math.abs(point.x - parseFloat(data.X));
                     const distanceY = Math.abs(point.y - parseFloat(data.Y));
                     const distance = Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
-                    const prediction = model.predict({
+                    const prediction = await ensemblePredict({
                         fingerprint: signalStrengths,
                         x: point.x,
                         y: point.y,
@@ -185,8 +203,7 @@ describe('data.openhps.accuracy', () => {
                         k
                     });
                     diffXYList.push(Math.abs(prediction - distance));
-                    //console.log(`X: ${point.x} Y: ${point.y} | ${parseFloat(data.X)} ${parseFloat(data.Y)} | ${diffX} ${diffY}`);
-                });
+                }
                 const avgDiffXY = diffXYList.reduce((a, b) => a + b, 0) / diffXYList.length;
                 const maxDiffXY = diffXYList.reduce((a, b) => Math.max(a, b), 0);
                 const minDiffXY = diffXYList.reduce((a, b) => Math.min(a, b), 0);
@@ -196,15 +213,13 @@ describe('data.openhps.accuracy', () => {
                 console.log(`Min diff XY: ${minDiffXY}`);
                 console.log(``);
             }
-           
-            done();
         });
 
-        it('should predict accuracy from X,Y and save to JSON', (done) => {
+        it('should predict accuracy from X,Y and save to JSON', async () => {
             const results = [];
             for (let k = 1; k <= 10; k++) {
             const diffXYList = [];
-            [...testData, ...trainData].forEach((data) => {
+            for (const data of [...testData, ...trainData]) {
                 const signalStrengths: SignalStrenghts = {};
                 accessPoints.forEach((col) => {
                 signalStrengths[col] = parseFloat(data[col]);
@@ -215,7 +230,7 @@ describe('data.openhps.accuracy', () => {
                 const distanceX = Math.abs(point.x - parseFloat(data.X));
                 const distanceY = Math.abs(point.y - parseFloat(data.Y));
                 const distance = Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
-                const prediction = model.predict({
+                const prediction = await ensemblePredict({
                 fingerprint: signalStrengths,
                 x: point.x,
                 y: point.y,
@@ -229,34 +244,33 @@ describe('data.openhps.accuracy', () => {
                     accuracy: Math.abs(prediction)
                 });
                 diffXYList.push(Math.abs(prediction - distance));
-            });
+            }
             const avgDiffXY = diffXYList.reduce((a, b) => a + b, 0) / diffXYList.length;
             console.log(`K: ${k}`);
             console.log(`Average diff XY: ${avgDiffXY}`);
             }
             fs.writeFileSync('accuracy_results.json', JSON.stringify(results, null, 2));
-            done();
         });
 
-        it('should predict RSSI values from an X, Y coordinate', (done) => {
+        it('should predict RSSI values from an X, Y coordinate', async () => {
             const diffs = [];
-            testData.forEach((data) => {
+            for (const data of testData) {
                 const signalStrengths: SignalStrenghts = {};
                 accessPoints.forEach((col) => {
                     signalStrengths[col] = parseFloat(data[col]);
                 });
-                const prediction = model.predictRSSI(parseFloat(data.X), parseFloat(data.Y), 0);
+                const prediction = await models[0].predictRSSI(parseFloat(data.X), parseFloat(data.Y), 0);
                 accessPoints.forEach((col) => {
                     expect(prediction[col]).to.not.be.NaN;
                 });
-                const accuracy1 = model.predict({
+                const accuracy1 = await ensemblePredict({
                     fingerprint: prediction,
                     x: parseFloat(data.X),
                     y: parseFloat(data.Y),
                     z: 0,
                     k: 3
                 });
-                const accuracy2 = model.predict({
+                const accuracy2 = await ensemblePredict({
                     fingerprint: signalStrengths,
                     x: parseFloat(data.X),
                     y: parseFloat(data.Y),
@@ -265,14 +279,13 @@ describe('data.openhps.accuracy', () => {
                 });
                 const diff = Math.abs(accuracy1 - accuracy2);
                 diffs.push(diff);
-            });
+            }
             const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
             const maxDiff = diffs.reduce((a, b) => Math.max(a, b), 0);
             const minDiff = diffs.reduce((a, b) => Math.min(a, b), 0);
             console.log(`Average diff: ${avgDiff}`);
             console.log(`Max diff: ${maxDiff}`);
             console.log(`Min diff: ${minDiff}`);
-            done();
         });
     });
 

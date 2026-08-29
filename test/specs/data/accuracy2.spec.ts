@@ -3,10 +3,12 @@ import * as fs from 'fs';
 import * as csv from 'csv-parser';
 import { Vector3 } from '@openhps/core';
 import { expect } from 'chai';
+import { ensureBackend } from '../../tf';
 import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyModel';
 import { Fingerprinting } from '../Fingerprinting';
 
-const epochs = 250;
+const epochs = process.env.EPOCHS ? parseInt(process.env.EPOCHS, 10) : 250;
+const modelDir = process.env.MODEL_DIR ?? "test/data/model2";
 
 describe('data.ujiindoorloc.accuracy', () => {
     const trainData: any[] = [];
@@ -37,7 +39,7 @@ describe('data.ujiindoorloc.accuracy', () => {
     }
 
     before((done) => {
-        loadTrainData().then(() => {
+        ensureBackend().then(() => loadTrainData()).then(() => {
             return loadTestData();
         }).then(() => {
             console.log(`Train data: ${trainData.length}`);
@@ -114,7 +116,7 @@ describe('data.ujiindoorloc.accuracy', () => {
             model = new AccuracyModel({
                 accessPoints,
             });
-            return model.load("test/data/model2");
+            return model.load(modelDir);
         }).then(() => {
             done();
         }).catch(done);
@@ -122,7 +124,7 @@ describe('data.ujiindoorloc.accuracy', () => {
 
     after((done) => {
         // Save the model
-        model.save("test/data/model2").then(() => {
+        model.save(modelDir).then(() => {
             done();
         }).catch(done);
     });
@@ -188,10 +190,10 @@ describe('data.ujiindoorloc.accuracy', () => {
     });
 
     describe('prediction', () => {	
-        it('should predict the fingerprinting accuracy', (done) => {
+        it('should predict the fingerprinting accuracy', async () => {
             for (let k = 3; k <= 3; k++) {
                 const diffXYList = [];
-                testData.forEach((data) => {
+                for (const data of testData) {
                     const signalStrengths: SignalStrenghts = {};
                     accessPoints.forEach((col) => {
                         signalStrengths[col] = parseFloat(data[col]);
@@ -203,7 +205,7 @@ describe('data.ujiindoorloc.accuracy', () => {
                     const distanceX = Math.abs(point.x - parseFloat(data.LATITUDE));
                     const distanceY = Math.abs(point.y - parseFloat(data.LONGITUDE));
                     const distance = Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
-                    const prediction = model.predict({
+                    const prediction = await model.predict({
                         fingerprint: signalStrengths,
                         x: point.x,
                         y: point.y,
@@ -211,8 +213,7 @@ describe('data.ujiindoorloc.accuracy', () => {
                         k
                     });
                     diffXYList.push(Math.abs(prediction - distance));
-                    //console.log(`X: ${point.x} Y: ${point.y} | ${parseFloat(data.X)} ${parseFloat(data.Y)} | ${diffX} ${diffY}`);
-                });
+                }
                 const avgDiffXY = diffXYList.reduce((a, b) => a + b, 0) / diffXYList.length;
                 const maxDiffXY = diffXYList.reduce((a, b) => Math.max(a, b), 0);
                 const minDiffXY = diffXYList.reduce((a, b) => Math.min(a, b), 0);
@@ -222,8 +223,6 @@ describe('data.ujiindoorloc.accuracy', () => {
                 console.log(`Min diff XY: ${minDiffXY}`);
                 console.log(``);
             }
-           
-            done();
         });
     });
 
