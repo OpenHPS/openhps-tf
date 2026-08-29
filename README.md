@@ -31,6 +31,38 @@ npm install @openhps/tf --save
 
 ## Usage
 
+The repo contains the OpenHPS TensorFlow integration (services/nodes) and the
+**accuracy-model experiment** — an AI model that predicts kNN fingerprinting
+error in metres. Full architecture, the changes made, and measured results are
+in **[docs/MODEL.md](docs/MODEL.md)**.
+
+### The experiment
+
+```bash
+npm install
+# Train + evaluate the accuracy model on the bundled OpenHPS-2021-05 data:
+EPOCHS=250 PATIENCE=20 BATCH_SIZE=256 npm run test -- --grep "data.openhps.accuracy"
+```
+
+The suite (a) trains an autoencoder + accuracy head + radio-map model,
+(b) evaluates how close the predicted error is to the true kNN error per `k`,
+and (c) writes `accuracy_results.json` (heatmap source). Configuration via env:
+`ENSEMBLE` (train N models and average predictions — the one measured
+improvement, ~6–8 % lower error), `MODEL_DIR`.
+
+### Remote GPU training (srv3)
+
+Training runs on the remote box (`192.168.1.5`) in Docker — no system CUDA or
+Node needed on the host. Copy `.env.example` to `.env` and adjust, then:
+
+```bash
+./scripts/sync.sh            # push source + data (node_modules stays remote)
+./scripts/remote_setup.sh    # one-time: verify GPU + build the training image
+./scripts/train_remote.sh    # detached run, tails logs, pulls model back
+```
+
+The training container uses `tfjs-node-gpu`, which requires an Ampere (sm_86+)
+GPU.
 
 ## Contributors
 The framework is open source and is mainly developed by PhD Student Maxim Van de Wynckel as part of his research towards *Hybrid Positioning and Implicit Human-Computer Interaction* under the supervision of Prof. Dr. Beat Signer.

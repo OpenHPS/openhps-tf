@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="222" viewBox="0 0 680 222" font-family="Segoe UI, sans-serif">
+<rect width="680" height="222" fill="#ffffff"/>
+<path d="M 250 91 C 295 91, 295 91, 340 91" fill="none" stroke="#b0bec5" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 530 91 C 575 91, 575 91, 620 91" fill="none" stroke="#b0bec5" stroke-width="1.5" marker-end="url(#arrow)"/>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#90a4ae"/></marker></defs>
+<text x="60" y="28" font-size="16" font-weight="700" fill="#37474f">Radio map (rssiModel) — position → fingerprint</text>
+<rect x="60" y="60" width="190" height="62" rx="8" fill="#f3e5f5" stroke="#8e24aa" stroke-width="1.5"/>
+<g transform="translate(155, 78)"><text x="0" y="0" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#263238"><tspan x="0" dy="0" font-weight="700">Dense</tspan><tspan x="0" dy="15" font-size="9" fill="#546e7a">dense_Dense11</tspan><tspan x="0" dy="15" font-size="10" fill="#455a64">in [3] · 128 · relu</tspan></text></g>
+<rect x="340" y="60" width="190" height="62" rx="8" fill="#f3e5f5" stroke="#8e24aa" stroke-width="1.5"/>
+<g transform="translate(435, 78)"><text x="0" y="0" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#263238"><tspan x="0" dy="0" font-weight="700">Dense</tspan><tspan x="0" dy="15" font-size="9" fill="#546e7a">dense_Dense12</tspan><tspan x="0" dy="15" font-size="10" fill="#455a64">256 · relu</tspan></text></g>
+<rect x="620" y="60" width="190" height="62" rx="8" fill="#ffe0b2" stroke="#ef6c00" stroke-width="1.5"/>
+<g transform="translate(715, 78)"><text x="0" y="0" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#263238"><tspan x="0" dy="0" font-weight="700">Dense</tspan><tspan x="0" dy="15" font-size="9" fill="#546e7a">dense_Dense13</tspan><tspan x="0" dy="15" font-size="10" fill="#455a64">352 · sigmoid</tspan></text></g>
+</svg>
