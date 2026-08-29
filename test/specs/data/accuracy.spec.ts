@@ -8,7 +8,7 @@ import { AccuracyModel, AccuracyModelData, AccuracyModelInput, SignalStrenghts }
 import { Fingerprinting } from '../Fingerprinting';
 import * as tf from '@tensorflow/tfjs';
 const epochs = process.env.EPOCHS ? parseInt(process.env.EPOCHS, 10) : 200;
-const modelDir = process.env.MODEL_DIR ?? "test/data/model";
+const modelDir = process.env.MODEL_DIR ?? 'test/data/model';
 const ensembleSize = process.env.ENSEMBLE ? parseInt(process.env.ENSEMBLE, 10) : 1;
 
 describe('data.openhps.accuracy', () => {
@@ -17,7 +17,7 @@ describe('data.openhps.accuracy', () => {
     const testData: any[] = [];
     const rawTestData: any[] = [];
     const accessPoints: string[] = [];
-    let fingerprinting: Fingerprinting = new Fingerprinting();
+    const fingerprinting: Fingerprinting = new Fingerprinting();
     let models: AccuracyModel[] = [];
 
     // Average prediction over the ensemble members (ENSEMBLE=1 => single model).
@@ -32,11 +32,15 @@ describe('data.openhps.accuracy', () => {
     function loadData(path: string, array: any[]): Promise<void> {
         return new Promise((resolve) => {
             fs.createReadStream(path)
-                .pipe(csv({
-                    separator: ","
-                })).on('data', row => {
+                .pipe(
+                    csv({
+                        separator: ',',
+                    }),
+                )
+                .on('data', (row) => {
                     array.push(row);
-                }).on('end', () => {
+                })
+                .on('end', () => {
                     resolve();
                 });
         });
@@ -59,71 +63,84 @@ describe('data.openhps.accuracy', () => {
     }
 
     before((done) => {
-        ensureBackend().then(() => loadTrainData()).then(() => {
-            return loadTestData();
-        }).then(() => {
-            return loadRawTestData();
-        }).then(() => {
-            return loadRawTrainData();
-        }).then(() => {
-            // Common access points
-            const trainAccessPoints = Object.keys(trainData[0]).filter(col => col.startsWith("WAP_"));
-            const testAccessPoints = Object.keys(testData[0]).filter(col => col.startsWith("WAP_"));
-            trainAccessPoints.forEach(col => {
-                 if (testAccessPoints.includes(col)) {
-                     accessPoints.push(col);
-                 }
-            });
-            testAccessPoints.forEach(col => {
-                 if (!accessPoints.includes(col)) {
-                     accessPoints.push(col);
-                 }
-            });
-            // Create fingerprints
-            const fingerprints = [];
-            trainData.forEach((data) => {
-                const fingerprint: { rssi: SignalStrenghts, x: number, y: number } = { rssi: {}, x: parseFloat(data.X), y: parseFloat(data.Y) };
-                accessPoints.forEach((col) => {
-                    fingerprint.rssi[col] = parseFloat(data[col]);
-                });
-                fingerprints.push(fingerprint);
-            });
-            fingerprinting.load(fingerprints);
-
-            const accessPointPerScan = rawTrainData.map(d => {
-                let count = 0;
-                accessPoints.forEach(col => {
-                    if (parseFloat(d[col]) !== 100) {
-                        count++;
+        ensureBackend()
+            .then(() => loadTrainData())
+            .then(() => {
+                return loadTestData();
+            })
+            .then(() => {
+                return loadRawTestData();
+            })
+            .then(() => {
+                return loadRawTrainData();
+            })
+            .then(() => {
+                // Common access points
+                const trainAccessPoints = Object.keys(trainData[0]).filter((col) => col.startsWith('WAP_'));
+                const testAccessPoints = Object.keys(testData[0]).filter((col) => col.startsWith('WAP_'));
+                trainAccessPoints.forEach((col) => {
+                    if (testAccessPoints.includes(col)) {
+                        accessPoints.push(col);
                     }
                 });
-                return count;
-            });
-            const avgAccessPointsPerScan = accessPointPerScan
-                .reduce((a, b) => a + b, 0) / rawTrainData.length;
-            const maxAccessPointsPerScan = accessPointPerScan
-                .reduce((a, b) => Math.max(a, b), 0);
+                testAccessPoints.forEach((col) => {
+                    if (!accessPoints.includes(col)) {
+                        accessPoints.push(col);
+                    }
+                });
+                // Create fingerprints
+                const fingerprints = [];
+                trainData.forEach((data) => {
+                    const fingerprint: { rssi: SignalStrenghts; x: number; y: number } = {
+                        rssi: {},
+                        x: parseFloat(data.X),
+                        y: parseFloat(data.Y),
+                    };
+                    accessPoints.forEach((col) => {
+                        fingerprint.rssi[col] = parseFloat(data[col]);
+                    });
+                    fingerprints.push(fingerprint);
+                });
+                fingerprinting.load(fingerprints);
 
-            console.log(`Access points: ${accessPoints.length}`);
-            console.log(`Average access points per scan: ${avgAccessPointsPerScan}`);
-            console.log(`Max access points per scan: ${maxAccessPointsPerScan}`);
+                const accessPointPerScan = rawTrainData.map((d) => {
+                    let count = 0;
+                    accessPoints.forEach((col) => {
+                        if (parseFloat(d[col]) !== 100) {
+                            count++;
+                        }
+                    });
+                    return count;
+                });
+                const avgAccessPointsPerScan = accessPointPerScan.reduce((a, b) => a + b, 0) / rawTrainData.length;
+                const maxAccessPointsPerScan = accessPointPerScan.reduce((a, b) => Math.max(a, b), 0);
 
-            models = Array.from({ length: ensembleSize }, () => new AccuracyModel({
-                accessPoints
-            }));
-            return Promise.all(models.map((m, i) =>
-                m.load(i === 0 ? modelDir : `${modelDir}_${i}`)));
-        }).then(() => {
-            done();
-        }).catch(done);
+                console.log(`Access points: ${accessPoints.length}`);
+                console.log(`Average access points per scan: ${avgAccessPointsPerScan}`);
+                console.log(`Max access points per scan: ${maxAccessPointsPerScan}`);
+
+                models = Array.from(
+                    { length: ensembleSize },
+                    () =>
+                        new AccuracyModel({
+                            accessPoints,
+                        }),
+                );
+                return Promise.all(models.map((m, i) => m.load(i === 0 ? modelDir : `${modelDir}_${i}`)));
+            })
+            .then(() => {
+                done();
+            })
+            .catch(done);
     });
 
     after((done) => {
         // Save the model(s); ensemble member i > 0 goes to modelDir_i.
-        Promise.all(models.map((m, i) =>
-            m.save(i === 0 ? modelDir : `${modelDir}_${i}`))).then(() => {
-            done();
-        }).catch(done);
+        Promise.all(models.map((m, i) => m.save(i === 0 ? modelDir : `${modelDir}_${i}`)))
+            .then(() => {
+                done();
+            })
+            .catch(done);
     });
 
     describe('fingerprinting', () => {
@@ -143,8 +160,7 @@ describe('data.openhps.accuracy', () => {
             });
             done();
         }).timeout(10000);
-    })
-
+    });
 
     describe('training', () => {
         it('should train the fingerprinting model', (done) => {
@@ -164,7 +180,7 @@ describe('data.openhps.accuracy', () => {
                         x: point.x,
                         y: point.y,
                         z: point.z,
-                        k
+                        k,
                     });
                     const accuracy = point.distanceTo(new Vector3(parseFloat(data.X), parseFloat(data.Y), 0));
                     trainDataObject.ys.push(accuracy);
@@ -174,13 +190,15 @@ describe('data.openhps.accuracy', () => {
             models.forEach((model) => {
                 trainChain = trainChain.then(() => model.train(trainDataObject, epochs));
             });
-            trainChain.then(() => {
-                done();
-            }).catch(done);
+            trainChain
+                .then(() => {
+                    done();
+                })
+                .catch(done);
         }).timeout(-1);
     });
 
-    describe('prediction', () => {	
+    describe('prediction', () => {
         it('should predict the fingerprinting accuracy', async () => {
             for (let k = 1; k <= 10; k++) {
                 const diffXYList = [];
@@ -200,7 +218,7 @@ describe('data.openhps.accuracy', () => {
                         x: point.x,
                         y: point.y,
                         z: point.z,
-                        k
+                        k,
                     });
                     diffXYList.push(Math.abs(prediction - distance));
                 }
@@ -218,36 +236,36 @@ describe('data.openhps.accuracy', () => {
         it('should predict accuracy from X,Y and save to JSON', async () => {
             const results = [];
             for (let k = 1; k <= 10; k++) {
-            const diffXYList = [];
-            for (const data of [...testData, ...trainData]) {
-                const signalStrengths: SignalStrenghts = {};
-                accessPoints.forEach((col) => {
-                signalStrengths[col] = parseFloat(data[col]);
-                });
-                const point = fingerprinting.calc(k, signalStrengths, true);
-                expect(point.x).to.not.be.NaN;
-                expect(point.y).to.not.be.NaN;
-                const distanceX = Math.abs(point.x - parseFloat(data.X));
-                const distanceY = Math.abs(point.y - parseFloat(data.Y));
-                const distance = Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
-                const prediction = await ensemblePredict({
-                fingerprint: signalStrengths,
-                x: point.x,
-                y: point.y,
-                z: point.z,
-                k
-                });
-                results.push({
-                    x: point.x,
-                    y: point.y,
-                    k,
-                    accuracy: Math.abs(prediction)
-                });
-                diffXYList.push(Math.abs(prediction - distance));
-            }
-            const avgDiffXY = diffXYList.reduce((a, b) => a + b, 0) / diffXYList.length;
-            console.log(`K: ${k}`);
-            console.log(`Average diff XY: ${avgDiffXY}`);
+                const diffXYList = [];
+                for (const data of [...testData, ...trainData]) {
+                    const signalStrengths: SignalStrenghts = {};
+                    accessPoints.forEach((col) => {
+                        signalStrengths[col] = parseFloat(data[col]);
+                    });
+                    const point = fingerprinting.calc(k, signalStrengths, true);
+                    expect(point.x).to.not.be.NaN;
+                    expect(point.y).to.not.be.NaN;
+                    const distanceX = Math.abs(point.x - parseFloat(data.X));
+                    const distanceY = Math.abs(point.y - parseFloat(data.Y));
+                    const distance = Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
+                    const prediction = await ensemblePredict({
+                        fingerprint: signalStrengths,
+                        x: point.x,
+                        y: point.y,
+                        z: point.z,
+                        k,
+                    });
+                    results.push({
+                        x: point.x,
+                        y: point.y,
+                        k,
+                        accuracy: Math.abs(prediction),
+                    });
+                    diffXYList.push(Math.abs(prediction - distance));
+                }
+                const avgDiffXY = diffXYList.reduce((a, b) => a + b, 0) / diffXYList.length;
+                console.log(`K: ${k}`);
+                console.log(`Average diff XY: ${avgDiffXY}`);
             }
             fs.writeFileSync('accuracy_results.json', JSON.stringify(results, null, 2));
         });
@@ -268,14 +286,14 @@ describe('data.openhps.accuracy', () => {
                     x: parseFloat(data.X),
                     y: parseFloat(data.Y),
                     z: 0,
-                    k: 3
+                    k: 3,
                 });
                 const accuracy2 = await ensemblePredict({
                     fingerprint: signalStrengths,
                     x: parseFloat(data.X),
                     y: parseFloat(data.Y),
                     z: 0,
-                    k: 3
+                    k: 3,
                 });
                 const diff = Math.abs(accuracy1 - accuracy2);
                 diffs.push(diff);
@@ -288,5 +306,4 @@ describe('data.openhps.accuracy', () => {
             console.log(`Min diff: ${minDiff}`);
         });
     });
-
 });

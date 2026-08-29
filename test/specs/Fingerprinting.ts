@@ -1,21 +1,29 @@
-import { DistanceFunction, Fingerprint, KDTree, WeightFunction } from "@openhps/fingerprinting";
-import { SignalStrenghts } from "./AccuracyModel";
-import { Absolute3DPosition, AbsolutePosition, Vector3 } from "@openhps/core";
+import { DistanceFunction, Fingerprint, KDTree, WeightFunction } from '@openhps/fingerprinting';
+import { SignalStrenghts } from './AccuracyModel';
+import { Absolute3DPosition, AbsolutePosition, Vector3 } from '@openhps/core';
 
-export interface FingerprintObject { rssi: SignalStrenghts, x: number, y: number, z: number };
+export interface FingerprintObject {
+    rssi: SignalStrenghts;
+    x: number;
+    y: number;
+    z: number;
+}
 
 export class Fingerprinting {
     private fingerprints = Array<FingerprintObject>();
     private tree: KDTree;
-    
+
     load(data: Array<FingerprintObject>) {
         this.fingerprints = data;
-        this.tree = new KDTree(this.fingerprints.map(f => {
-            const fingerprint = new Fingerprint();
-            fingerprint.vector = Object.values(f.rssi);
-            fingerprint.setPosition(new Absolute3DPosition(f.x, f.y, f.z));
-            return fingerprint;
-        }), DistanceFunction.EUCLIDEAN);
+        this.tree = new KDTree(
+            this.fingerprints.map((f) => {
+                const fingerprint = new Fingerprint();
+                fingerprint.vector = Object.values(f.rssi);
+                fingerprint.setPosition(new Absolute3DPosition(f.x, f.y, f.z));
+                return fingerprint;
+            }),
+            DistanceFunction.EUCLIDEAN,
+        );
     }
 
     calc(k: number, data: SignalStrenghts, weighted: boolean = false): Vector3 {

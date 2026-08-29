@@ -8,7 +8,7 @@ import { AccuracyModel, AccuracyModelData, SignalStrenghts } from '../AccuracyMo
 import { Fingerprinting } from '../Fingerprinting';
 
 const epochs = process.env.EPOCHS ? parseInt(process.env.EPOCHS, 10) : 250;
-const modelDir = process.env.MODEL_DIR ?? "test/data/model2";
+const modelDir = process.env.MODEL_DIR ?? 'test/data/model2';
 
 describe('data.ujiindoorloc.accuracy', () => {
     const trainData: any[] = [];
@@ -20,11 +20,15 @@ describe('data.ujiindoorloc.accuracy', () => {
     function loadData(path: string, array: any[]): Promise<void> {
         return new Promise((resolve) => {
             fs.createReadStream(path)
-                .pipe(csv({
-                    separator: ","
-                })).on('data', row => {
+                .pipe(
+                    csv({
+                        separator: ',',
+                    }),
+                )
+                .on('data', (row) => {
                     array.push(row);
-                }).on('end', () => {
+                })
+                .on('end', () => {
                     resolve();
                 });
         });
@@ -39,94 +43,108 @@ describe('data.ujiindoorloc.accuracy', () => {
     }
 
     before((done) => {
-        ensureBackend().then(() => loadTrainData()).then(() => {
-            return loadTestData();
-        }).then(() => {
-            console.log(`Train data: ${trainData.length}`);
-            console.log(`Test data: ${testData.length}`);
+        ensureBackend()
+            .then(() => loadTrainData())
+            .then(() => {
+                return loadTestData();
+            })
+            .then(() => {
+                console.log(`Train data: ${trainData.length}`);
+                console.log(`Test data: ${testData.length}`);
 
-            // Common access points
-            const trainAccessPoints = Object.keys(trainData[0]).filter(col => col.startsWith("WAP"));
-            const testAccessPoints = Object.keys(testData[0]).filter(col => col.startsWith("WAP"));
-            trainAccessPoints.forEach(col => {
-                 if (testAccessPoints.includes(col)) {
-                     accessPoints.push(col);
-                 }
-            });
-            testAccessPoints.forEach(col => {
-                 if (!accessPoints.includes(col)) {
-                     accessPoints.push(col);
-                 }
-            });
-
-            // Create fingerprints
-            const fingerprints = [];
-            const locations: Array<{ x: number, y: number, z: number }> = [];
-            trainData.forEach((data) => {
-                const fingerprint: { rssi: SignalStrenghts, x: number, y: number, z: number } = { rssi: {}, x: parseFloat(data.LATITUDE), y: parseFloat(data.LONGITUDE), z: parseFloat(data.FLOOR) };
-                accessPoints.forEach((col) => {
-                    fingerprint.rssi[col] = parseFloat(data[col]);
-                });
-                if (!locations.find(l => l.x === fingerprint.x && l.y === fingerprint.y && l.z === fingerprint.z)) {
-                    locations.push({ x: fingerprint.x, y: fingerprint.y, z: fingerprint.z });
-                }
-                fingerprints.push(fingerprint);
-            });
-            // Aggregate fingerprints
-            const aggregatedFingerprints: Array<{ rssi: SignalStrenghts, x: number, y: number, z: number }> = [];
-            locations.forEach(location => {
-                const locationFingerprints: Array<{ rssi: SignalStrenghts, x: number, y: number, z: number }> = fingerprints.filter(f => f.x === location.x && f.y === location.y && f.z === location.z);
-                aggregatedFingerprints.push({
-                    rssi: locationFingerprints.reduce((a, b) => {
-                        const rssi: SignalStrenghts = {};
-                        accessPoints.forEach(col => {
-                            if (a[col]) {
-                                rssi[col] = (a[col] + b.rssi[col]) / 2;
-                            } else {
-                                rssi[col] = b.rssi[col];
-                            }
-                        });
-                        return rssi;
-                    }, {}),
-                    x: location.x,
-                    y: location.y,
-                    z: location.z
-                });
-            });
-            fingerprinting.load(aggregatedFingerprints);
-
-            const accessPointPerScan = trainData.map(d => {
-                let count = 0;
-                accessPoints.forEach(col => {
-                    if (parseFloat(d[col]) !== 100) {
-                        count++;
+                // Common access points
+                const trainAccessPoints = Object.keys(trainData[0]).filter((col) => col.startsWith('WAP'));
+                const testAccessPoints = Object.keys(testData[0]).filter((col) => col.startsWith('WAP'));
+                trainAccessPoints.forEach((col) => {
+                    if (testAccessPoints.includes(col)) {
+                        accessPoints.push(col);
                     }
                 });
-                return count;
-            });
-            const avgAccessPointsPerScan = accessPointPerScan
-                .reduce((a, b) => a + b, 0) / trainData.length;
-            const maxAccessPointsPerScan = accessPointPerScan
-                .reduce((a, b) => Math.max(a, b), 0);
+                testAccessPoints.forEach((col) => {
+                    if (!accessPoints.includes(col)) {
+                        accessPoints.push(col);
+                    }
+                });
 
-            console.log(`Access points: ${accessPoints.length}`);
-            console.log(`Average access points per scan: ${avgAccessPointsPerScan}`);
-            console.log(`Max access points per scan: ${maxAccessPointsPerScan}`);
+                // Create fingerprints
+                const fingerprints = [];
+                const locations: Array<{ x: number; y: number; z: number }> = [];
+                trainData.forEach((data) => {
+                    const fingerprint: { rssi: SignalStrenghts; x: number; y: number; z: number } = {
+                        rssi: {},
+                        x: parseFloat(data.LATITUDE),
+                        y: parseFloat(data.LONGITUDE),
+                        z: parseFloat(data.FLOOR),
+                    };
+                    accessPoints.forEach((col) => {
+                        fingerprint.rssi[col] = parseFloat(data[col]);
+                    });
+                    if (
+                        !locations.find((l) => l.x === fingerprint.x && l.y === fingerprint.y && l.z === fingerprint.z)
+                    ) {
+                        locations.push({ x: fingerprint.x, y: fingerprint.y, z: fingerprint.z });
+                    }
+                    fingerprints.push(fingerprint);
+                });
+                // Aggregate fingerprints
+                const aggregatedFingerprints: Array<{ rssi: SignalStrenghts; x: number; y: number; z: number }> = [];
+                locations.forEach((location) => {
+                    const locationFingerprints: Array<{ rssi: SignalStrenghts; x: number; y: number; z: number }> =
+                        fingerprints.filter((f) => f.x === location.x && f.y === location.y && f.z === location.z);
+                    aggregatedFingerprints.push({
+                        rssi: locationFingerprints.reduce((a, b) => {
+                            const rssi: SignalStrenghts = {};
+                            accessPoints.forEach((col) => {
+                                if (a[col]) {
+                                    rssi[col] = (a[col] + b.rssi[col]) / 2;
+                                } else {
+                                    rssi[col] = b.rssi[col];
+                                }
+                            });
+                            return rssi;
+                        }, {}),
+                        x: location.x,
+                        y: location.y,
+                        z: location.z,
+                    });
+                });
+                fingerprinting.load(aggregatedFingerprints);
 
-            model = new AccuracyModel({
-                accessPoints,
-            });
-            return model.load(modelDir);
-        }).then(() => {
-            done();
-        }).catch(done);
+                const accessPointPerScan = trainData.map((d) => {
+                    let count = 0;
+                    accessPoints.forEach((col) => {
+                        if (parseFloat(d[col]) !== 100) {
+                            count++;
+                        }
+                    });
+                    return count;
+                });
+                const avgAccessPointsPerScan = accessPointPerScan.reduce((a, b) => a + b, 0) / trainData.length;
+                const maxAccessPointsPerScan = accessPointPerScan.reduce((a, b) => Math.max(a, b), 0);
+
+                console.log(`Access points: ${accessPoints.length}`);
+                console.log(`Average access points per scan: ${avgAccessPointsPerScan}`);
+                console.log(`Max access points per scan: ${maxAccessPointsPerScan}`);
+
+                model = new AccuracyModel({
+                    accessPoints,
+                });
+                return model.load(modelDir);
+            })
+            .then(() => {
+                done();
+            })
+            .catch(done);
     });
 
     after((done) => {
         // Save the model
-        model.save(modelDir).then(() => {
-            done();
-        }).catch(done);
+        model
+            .save(modelDir)
+            .then(() => {
+                done();
+            })
+            .catch(done);
     });
 
     describe('fingerprinting', () => {
@@ -142,7 +160,11 @@ describe('data.ujiindoorloc.accuracy', () => {
                 });
                 const point = fingerprinting.calc(k, signalStrengths, weighted);
                 results.push(point);
-                accuracy.push(point.distanceTo(new Vector3(parseFloat(data.LATITUDE), parseFloat(data.LONGITUDE), parseFloat(data.FLOOR))));
+                accuracy.push(
+                    point.distanceTo(
+                        new Vector3(parseFloat(data.LATITUDE), parseFloat(data.LONGITUDE), parseFloat(data.FLOOR)),
+                    ),
+                );
                 expect(point.x).to.not.be.NaN;
                 expect(point.y).to.not.be.NaN;
                 expect(point.z).to.not.be.NaN;
@@ -156,7 +178,7 @@ describe('data.ujiindoorloc.accuracy', () => {
             console.log(`Min accuracy: ${minAccuracy}`);
             done();
         }).timeout(-1);
-    })
+    });
 
     describe('training', () => {
         it('should train the fingerprinting model', (done) => {
@@ -176,20 +198,25 @@ describe('data.ujiindoorloc.accuracy', () => {
                         x: point.x,
                         y: point.y,
                         z: point.z,
-                        k
+                        k,
                     });
-                    const accuracy = point.distanceTo(new Vector3(parseFloat(data.LATITUDE), parseFloat(data.LONGITUDE), parseFloat(data.FLOOR)));
+                    const accuracy = point.distanceTo(
+                        new Vector3(parseFloat(data.LATITUDE), parseFloat(data.LONGITUDE), parseFloat(data.FLOOR)),
+                    );
                     trainDataObject.ys.push(accuracy);
-                    process.stdout.write(`k: ${k} | ${(index) + 1} / ${trainData.length}\t\t\r`);
+                    process.stdout.write(`k: ${k} | ${index + 1} / ${trainData.length}\t\t\r`);
                 });
             }
-            model.train(trainDataObject, epochs).then(() => {
-                done();
-            }).catch(done);
+            model
+                .train(trainDataObject, epochs)
+                .then(() => {
+                    done();
+                })
+                .catch(done);
         }).timeout(-1);
     });
 
-    describe('prediction', () => {	
+    describe('prediction', () => {
         it('should predict the fingerprinting accuracy', async () => {
             for (let k = 3; k <= 3; k++) {
                 const diffXYList = [];
@@ -210,7 +237,7 @@ describe('data.ujiindoorloc.accuracy', () => {
                         x: point.x,
                         y: point.y,
                         z: point.z,
-                        k
+                        k,
                     });
                     diffXYList.push(Math.abs(prediction - distance));
                 }
@@ -225,5 +252,4 @@ describe('data.ujiindoorloc.accuracy', () => {
             }
         });
     });
-
 });

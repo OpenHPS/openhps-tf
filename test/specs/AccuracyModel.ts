@@ -16,16 +16,17 @@ const ARCHITECTURE = 'dense-v2';
  * learned with binary cross entropy.
  */
 function fingerprintLoss(N: number): (yTrue: tf.Tensor, yPred: tf.Tensor) => tf.Scalar {
-    return (yTrue: tf.Tensor, yPred: tf.Tensor): tf.Scalar => tf.tidy(() => {
-        const rssiTrue = yTrue.slice([0, 0], [-1, N]);
-        const maskTrue = yTrue.slice([0, N], [-1, N]);
-        const rssiPred = yPred.slice([0, 0], [-1, N]);
-        const maskPred = yPred.slice([0, N], [-1, N]);
-        const count = maskTrue.sum().add(1e-6);
-        const rssiError = rssiTrue.sub(rssiPred).square().mul(maskTrue).sum().div(count);
-        const maskError = tf.losses.sigmoidCrossEntropy(maskTrue, maskPred).mean();
-        return rssiError.add(maskError.mul(0.25));
-    });
+    return (yTrue: tf.Tensor, yPred: tf.Tensor): tf.Scalar =>
+        tf.tidy(() => {
+            const rssiTrue = yTrue.slice([0, 0], [-1, N]);
+            const maskTrue = yTrue.slice([0, N], [-1, N]);
+            const rssiPred = yPred.slice([0, 0], [-1, N]);
+            const maskPred = yPred.slice([0, N], [-1, N]);
+            const count = maskTrue.sum().add(1e-6);
+            const rssiError = rssiTrue.sub(rssiPred).square().mul(maskTrue).sum().div(count);
+            const maskError = tf.losses.sigmoidCrossEntropy(maskTrue, maskPred).mean();
+            return rssiError.add(maskError.mul(0.25));
+        });
 }
 
 export class AccuracyModel {
@@ -77,13 +78,15 @@ export class AccuracyModel {
     private fitCallbacks(logFn: (epoch: number, logs: tf.Logs) => void): any[] {
         const callbacks: any[] = [];
         if (this.patience > 0) {
-            callbacks.push(tf.callbacks.earlyStopping({
-                monitor: 'val_loss',
-                minDelta: 1e-4,
-                patience: this.patience,
-                mode: 'min',
-                verbose: 1
-            }));
+            callbacks.push(
+                tf.callbacks.earlyStopping({
+                    monitor: 'val_loss',
+                    minDelta: 1e-4,
+                    patience: this.patience,
+                    mode: 'min',
+                    verbose: 1,
+                }),
+            );
         }
         callbacks.push(new tf.CustomCallback({ onEpochEnd: (epoch, logs) => logFn(epoch, logs) }));
         return callbacks;
@@ -92,8 +95,10 @@ export class AccuracyModel {
     load(directory: string): Promise<void> {
         return new Promise((resolve, reject) => {
             const optionsPath = path.join(directory, 'options.json');
-            if (!fs.existsSync(optionsPath) ||
-                JSON.parse(fs.readFileSync(optionsPath, 'utf-8')).architecture !== ARCHITECTURE) {
+            if (
+                !fs.existsSync(optionsPath) ||
+                JSON.parse(fs.readFileSync(optionsPath, 'utf-8')).architecture !== ARCHITECTURE
+            ) {
                 // No compatible (dense-v2) model present - start from scratch.
                 resolve();
                 return;
@@ -117,8 +122,7 @@ export class AccuracyModel {
                 })
                 .then((model) => {
                     this.rssiModel = model as tf.Sequential;
-                    this.options = Object.assign(this.options,
-                        JSON.parse(fs.readFileSync(optionsPath, 'utf-8')));
+                    this.options = Object.assign(this.options, JSON.parse(fs.readFileSync(optionsPath, 'utf-8')));
                     this.rebuildAutoencoder();
                     this.compile();
                     resolve();
@@ -138,12 +142,16 @@ export class AccuracyModel {
                 this.encoder.save(`file://${encoderPath}`),
                 this.decoder.save(`file://${decoderPath}`),
                 this.accuracyModel.save(`file://${accuracyPath}`),
-                this.rssiModel.save(`file://${rssiPath}`)
-            ]).then(() => {
-                fs.writeFileSync(path.join(directory, 'options.json'),
-                    JSON.stringify(Object.assign({}, this.options, { architecture: ARCHITECTURE })));
-                resolve();
-            }).catch(reject);
+                this.rssiModel.save(`file://${rssiPath}`),
+            ])
+                .then(() => {
+                    fs.writeFileSync(
+                        path.join(directory, 'options.json'),
+                        JSON.stringify(Object.assign({}, this.options, { architecture: ARCHITECTURE })),
+                    );
+                    resolve();
+                })
+                .catch(reject);
         });
     }
 
@@ -151,17 +159,17 @@ export class AccuracyModel {
         this.autoencoder.compile({
             optimizer: tf.train.adam(1e-4),
             loss: fingerprintLoss(this.N),
-            metrics: ['mse']
+            metrics: ['mse'],
         });
         this.accuracyModel.compile({
             optimizer: tf.train.adam(1e-4),
             loss: tf.losses.huberLoss,
-            metrics: ['mae']
+            metrics: ['mae'],
         });
         this.rssiModel.compile({
             optimizer: tf.train.adam(1e-4),
             loss: fingerprintLoss(this.N),
-            metrics: ['mse']
+            metrics: ['mse'],
         });
     }
 
@@ -205,7 +213,7 @@ export class AccuracyModel {
         const strongest = this.options.minRSSI ?? -99;
         const weakest = this.options.maxRSSI ?? -96;
         const span = strongest - weakest;
-        const normalized = seen.map(v => span === 0 ? 0 : Math.min(Math.max((v - weakest) / span, 0), 1));
+        const normalized = seen.map((v) => (span === 0 ? 0 : Math.min(Math.max((v - weakest) / span, 0), 1)));
         const mean = normalized.reduce((a, b) => a + b, 0) / normalized.length;
         const variance = normalized.reduce((a, b) => a + (b - mean) * (b - mean), 0) / normalized.length;
         return [seen.length / this.N, mean, Math.sqrt(variance)];
@@ -231,7 +239,7 @@ export class AccuracyModel {
      * location appears in both sets (a random split would leak the same
      * fingerprints across train and validation).
      */
-    private splitByLocation(data: AccuracyModelData, ratio = 0.8): { trainIdx: number[], valIdx: number[] } {
+    private splitByLocation(data: AccuracyModelData, ratio = 0.8): { trainIdx: number[]; valIdx: number[] } {
         const groups = new Map<string, number[]>();
         data.xs.forEach((input, index) => {
             const key = `${input.x},${input.y},${input.z ?? 0}`;
@@ -326,7 +334,7 @@ export class AccuracyModel {
 
         // Split by location.
         const { trainIdx, valIdx } = this.splitByLocation(data);
-        const pick = (arr: number[][], idx: number[]) => idx.map(i => arr[i]);
+        const pick = (arr: number[][], idx: number[]) => idx.map((i) => arr[i]);
         const trainFp = tf.tensor2d(pick(fp, trainIdx), [trainIdx.length, N * 2]);
         const valFp = tf.tensor2d(pick(fp, valIdx), [valIdx.length, N * 2]);
         const trainStats = tf.tensor2d(pick(stats, trainIdx), [trainIdx.length, 3]);
@@ -335,14 +343,14 @@ export class AccuracyModel {
         const valPos4 = tf.tensor2d(pick(pos4, valIdx), [valIdx.length, 4]);
         const trainPos3 = tf.tensor2d(pick(pos3, trainIdx), [trainIdx.length, 3]);
         const valPos3 = tf.tensor2d(pick(pos3, valIdx), [valIdx.length, 3]);
-        const trainY = tf.tensor1d(trainIdx.map(i => data.ys[i]));
-        const valY = tf.tensor1d(valIdx.map(i => data.ys[i]));
+        const trainY = tf.tensor1d(trainIdx.map((i) => data.ys[i]));
+        const valY = tf.tensor1d(valIdx.map((i) => data.ys[i]));
 
         // 1. Denoising autoencoder (with masked augmentation on the train split).
         this.encoder.trainable = true;
         this.decoder.trainable = true;
         this.compile();
-        const autoTrain = [...pick(fp, trainIdx), ...pick(fp, trainIdx).map(v => this._maskFingerprint(v))];
+        const autoTrain = [...pick(fp, trainIdx), ...pick(fp, trainIdx).map((v) => this._maskFingerprint(v))];
         const autoTrainTensor = tf.tensor2d(autoTrain, [autoTrain.length, N * 2]);
         await this.autoencoder.fit(autoTrainTensor, autoTrainTensor, {
             epochs,
@@ -350,8 +358,10 @@ export class AccuracyModel {
             verbose: 0,
             validationData: [valFp, valFp],
             callbacks: this.fitCallbacks((epoch, logs) => {
-                console.log(`AE | Epoch ${epoch + 1}/${epochs} - Loss: ${logs.loss.toFixed(4)} - Val: ${(logs.val_loss ?? 0).toFixed(4)}`);
-            })
+                console.log(
+                    `AE | Epoch ${epoch + 1}/${epochs} - Loss: ${logs.loss.toFixed(4)} - Val: ${(logs.val_loss ?? 0).toFixed(4)}`,
+                );
+            }),
         });
 
         // 2. Accuracy model. The fingerprint encoder is frozen so the head is
@@ -365,8 +375,10 @@ export class AccuracyModel {
             verbose: 0,
             validationData: [[valFp, valStats, valPos4], valY],
             callbacks: this.fitCallbacks((epoch, logs) => {
-                console.log(`ACC | Epoch ${epoch + 1}/${epochs} - Loss: ${logs.loss.toFixed(4)} - MAE: ${(logs.mae ?? 0).toFixed(4)}m - Val MAE: ${(logs.val_mae ?? 0).toFixed(4)}m`);
-            })
+                console.log(
+                    `ACC | Epoch ${epoch + 1}/${epochs} - Loss: ${logs.loss.toFixed(4)} - MAE: ${(logs.mae ?? 0).toFixed(4)}m - Val MAE: ${(logs.val_mae ?? 0).toFixed(4)}m`,
+                );
+            }),
         });
 
         // 3. Radio map: position -> fingerprint.
@@ -376,8 +388,10 @@ export class AccuracyModel {
             verbose: 0,
             validationData: [valPos3, valFp],
             callbacks: this.fitCallbacks((epoch, logs) => {
-                console.log(`RSSI | Epoch ${epoch + 1}/${epochs} - Loss: ${logs.loss.toFixed(4)} - Val: ${(logs.val_loss ?? 0).toFixed(4)}`);
-            })
+                console.log(
+                    `RSSI | Epoch ${epoch + 1}/${epochs} - Loss: ${logs.loss.toFixed(4)} - Val: ${(logs.val_loss ?? 0).toFixed(4)}`,
+                );
+            }),
         });
     }
 
@@ -388,7 +402,7 @@ export class AccuracyModel {
         const statsTensor = tf.tensor2d([stats], [1, 3]);
         const posTensor = tf.tensor2d([[input.x, input.y, input.z ?? 0, input.k]], [1, 4]);
         const output = this.accuracyModel.predict([fpTensor, statsTensor, posTensor]) as tf.Tensor;
-        const values = await output.array() as number[][];
+        const values = (await output.array()) as number[][];
         fpTensor.dispose();
         statsTensor.dispose();
         posTensor.dispose();
@@ -399,7 +413,7 @@ export class AccuracyModel {
     async predictRSSI(x: number, y: number, z: number): Promise<SignalStrenghts> {
         const posTensor = tf.tensor2d([[x, y, z]], [1, 3]);
         const out = this.rssiModel.predict(posTensor) as tf.Tensor;
-        const prediction = await out.array() as number[][];
+        const prediction = (await out.array()) as number[][];
         posTensor.dispose();
         out.dispose();
         const signalStrengths: SignalStrenghts = {};
@@ -425,7 +439,7 @@ export interface AccuracyModelInput {
 }
 
 export interface AccuracyModelData {
-    xs: AccuracyModelInput[]
+    xs: AccuracyModelInput[];
     ys: number[];
 }
 

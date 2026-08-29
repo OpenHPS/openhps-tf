@@ -18,4 +18,3 @@ try {
 } catch (err) {
     require('@tensorflow/tfjs-node');
 }
-

@@ -1,6 +1,6 @@
-import { Service, ServiceOptions } from "@openhps/core";
+import { Service, ServiceOptions } from '@openhps/core';
 import * as tf from '@tensorflow/tfjs';
-import { TensorFlowOptions } from "../types";
+import { TensorFlowOptions } from '../types';
 
 export interface TFModel {
     /**
@@ -45,7 +45,7 @@ export class TensorFlowService extends Service {
         if (this.options.model) {
             this.addModel({
                 name: this.options.name,
-                fileOrUrl: this.options.model
+                fileOrUrl: this.options.model,
             });
         }
 
@@ -64,9 +64,11 @@ export class TensorFlowService extends Service {
                     }
                 });
             });
-            promise.then(() => {
-                resolve();
-            }).catch(reject);
+            promise
+                .then(() => {
+                    resolve();
+                })
+                .catch(reject);
         });
     }
 
@@ -82,7 +84,7 @@ export class TensorFlowService extends Service {
     getModel(name: string): TFModel {
         return this.models.get(name);
     }
-    
+
     /**
      * Add a TensorFlow model to the service.
      * @param model Model to add.
@@ -103,14 +105,16 @@ export class TensorFlowService extends Service {
             if (!model.fileOrUrl) {
                 reject(new Error(`Model ${model.name} does not have a file or URL`));
             }
-            tf.loadLayersModel(model.fileOrUrl).then(layersModel => {
-                this.models.set(model.name ?? model.fileOrUrl, {
-                    model: layersModel,
-                    name: model.name ?? model.fileOrUrl,
-                    fileOrUrl: model.fileOrUrl
-                });
-                resolve();
-            }).catch(reject);
+            tf.loadLayersModel(model.fileOrUrl)
+                .then((layersModel) => {
+                    this.models.set(model.name ?? model.fileOrUrl, {
+                        model: layersModel,
+                        name: model.name ?? model.fileOrUrl,
+                        fileOrUrl: model.fileOrUrl,
+                    });
+                    resolve();
+                })
+                .catch(reject);
         });
     }
 
@@ -124,16 +128,18 @@ export class TensorFlowService extends Service {
         return new Promise((resolve, reject) => {
             const model = this.models.get(name);
             if (model) {
-                model.model.save(fileOrUrl ?? model.fileOrUrl).then(() => {
-                    model.fileOrUrl = fileOrUrl ?? model.fileOrUrl;
-                    resolve();
-                }).catch(reject);
+                model.model
+                    .save(fileOrUrl ?? model.fileOrUrl)
+                    .then(() => {
+                        model.fileOrUrl = fileOrUrl ?? model.fileOrUrl;
+                        resolve();
+                    })
+                    .catch(reject);
             } else {
                 reject(new Error(`Model ${name} not found`));
             }
         });
     }
-
 }
 
 /**
