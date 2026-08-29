@@ -1,0 +1,23 @@
+name: CI
+
+on:
+    push:
+        branches: [main, dev]
+    pull_request:
+        branches: [main, dev]
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+    ci:
+        uses: OpenHPS/workflows/.github/workflows/module.yml@v1
+        secrets: inherit
+        with:
+            # The suites train the accuracy model end to end -- ~21 minutes locally,
+            # of which one case is a 10 minute fit -- so they are a research
+            # experiment rather than a regression gate. Run them with
+            # `npm test` (see docs/MODEL.md), not on every push.
+            run-tests: false
