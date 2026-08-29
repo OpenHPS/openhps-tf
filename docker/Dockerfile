@@ -1,10 +1,14 @@
-ARG UBUNTU_VERSION=20.04
-FROM nvidia/cuda:11.1.1-cudnn8-devel-ubuntu$UBUNTU_VERSION
+ARG UBUNTU_VERSION=22.04
+# Ubuntu 22.04 + CUDA 11.8: the libtensorflow-gpu 2.9.1 binary shipped with
+# tfjs-node-gpu needs a CUDA 11.x runtime + cuDNN 8; 22.04's newer glibc also
+# keeps the door open for native node modules that need GLIBCXX >= 3.4.29.
+ARG CUDA_VERSION=11.8.0
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu$UBUNTU_VERSION
 # FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu$UBUNTU_VERSION
 ENV DEBIAN_FRONTEND noninteractive
 ARG CMAKE_INSTALL_PREFIX=/usr/local
-ARG NUM_THREADS
-ARG NODEJS_MAJOR_VERSION
+ARG NUM_THREADS=8
+ARG NODEJS_MAJOR_VERSION=20
 
 # Display arguments
 RUN echo " \
@@ -12,7 +16,7 @@ RUN echo " \
   NodeJS version: ${NODEJS_MAJOR_VERSION}\n \
 "
 
-RUN rm /etc/apt/sources.list.d/cuda.list
+RUN rm -f /etc/apt/sources.list.d/cuda.list /etc/apt/sources.list.d/cuda-*.list
 # RUN rm /etc/apt/sources.list.d/nvidia-ml.list
 
 # install dependencies via apt
@@ -43,8 +47,7 @@ RUN set -x && \
     libavcodec-dev \
     libavformat-dev \
     libavutil-dev \
-    libswscale-dev \
-    libavresample-dev && \
+    libswscale-dev && \
   : "remove cache" && \
   apt-get autoremove -y -qq && \
   rm -rf /var/lib/apt/lists/*

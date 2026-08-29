@@ -11,6 +11,10 @@ examples/**/public/*openhps-core*
 examples/**/package-lock.json
 xunit.xml
 
+# Remote training
+.env
+training/runs/
+
 # Linked Software Dependencies
 components/**/*.jsonld
 config/**/*.json
