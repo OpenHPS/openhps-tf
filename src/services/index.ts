@@ -1,2 +1,2 @@
 export * from './TensorFlowService';
-export * from './AccuracyPredictionService';
+export * from './FingerprintAccuracyService';
