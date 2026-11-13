@@ -163,13 +163,18 @@ describe('data.openhps', () => {
 
         it('should predict locations from test data', () => {
             const tests = testData.length;
+            const xs = test.xs.arraySync();
+            const labels = test.labels.arraySync();
             let error = 0;
             let maxError = 0;
             let minError = Number.MAX_SAFE_INTEGER;
             for (let i = 0; i < tests; i++) {
-                const output = modelWLANFingerprinting.predict(tf.tensor([test.xs.arraySync()[i]])) as tf.Tensor;
+                const input = tf.tensor([xs[i]]);
+                const output = modelWLANFingerprinting.predict(input) as tf.Tensor;
                 const outputPosition = new Absolute2DPosition(...Array.from(output.dataSync().values()));
-                const evaluationPosition = new Absolute2DPosition(...test.labels.arraySync()[i]);
+                input.dispose();
+                output.dispose();
+                const evaluationPosition = new Absolute2DPosition(...labels[i]);
                 const distance = outputPosition.distanceTo(evaluationPosition);
                 maxError = Math.max(maxError, distance);
                 minError = Math.min(minError, distance);
@@ -183,13 +188,18 @@ describe('data.openhps', () => {
 
         it('should predict locations from train data', () => {
             const tests = trainData.length;
+            const xs = train.xs.arraySync();
+            const labels = train.labels.arraySync();
             let error = 0;
             let maxError = 0;
             let minError = Number.MAX_SAFE_INTEGER;
             for (let i = 0; i < tests; i++) {
-                const output = modelWLANFingerprinting.predict(tf.tensor([train.xs.arraySync()[i]])) as tf.Tensor;
+                const input = tf.tensor([xs[i]]);
+                const output = modelWLANFingerprinting.predict(input) as tf.Tensor;
                 const outputPosition = new Absolute2DPosition(...Array.from(output.dataSync().values()));
-                const evaluationPosition = new Absolute2DPosition(...train.labels.arraySync()[i]);
+                input.dispose();
+                output.dispose();
+                const evaluationPosition = new Absolute2DPosition(...labels[i]);
                 const distance = outputPosition.distanceTo(evaluationPosition);
                 maxError = Math.max(maxError, distance);
                 minError = Math.min(minError, distance);
@@ -261,7 +271,7 @@ describe('data.openhps', () => {
                                     }
                                 });
                                 testAccessPoints.forEach((col) => {
-                                    if (accessPoints.includes(col)) {
+                                    if (!accessPoints.includes(col)) {
                                         accessPoints.push(col);
                                     }
                                 });
@@ -355,13 +365,18 @@ describe('data.openhps', () => {
 
         it('should predict locations', () => {
             const tests = testData.length;
+            const xs = test.xs.arraySync();
+            const labels = test.labels.arraySync();
             let error = 0;
             let maxError = 0;
             let minError = Number.MAX_SAFE_INTEGER;
             for (let i = 0; i < tests; i++) {
-                const output = modelBLEFingerprinting.predict(tf.tensor([test.xs.arraySync()[i]])) as tf.Tensor;
+                const input = tf.tensor([xs[i]]);
+                const output = modelBLEFingerprinting.predict(input) as tf.Tensor;
                 const outputPosition = new Absolute2DPosition(...Array.from(output.dataSync().values()));
-                const evaluationPosition = new Absolute2DPosition(...test.labels.arraySync()[i]);
+                input.dispose();
+                output.dispose();
+                const evaluationPosition = new Absolute2DPosition(...labels[i]);
                 const distance = outputPosition.distanceTo(evaluationPosition);
                 maxError = Math.max(maxError, distance);
                 minError = Math.min(minError, distance);

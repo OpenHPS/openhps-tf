@@ -14,15 +14,6 @@ export class FingerprintAccuracy extends TensorFlowService {
         this.accessPoints = options.accessPoints ?? [];
     }
 
-    private get inputDimension(): number {
-        if (this.accessPoints.length <= 256) {
-            return 16;
-        } else if (this.accessPoints.length <= 1024) {
-            return 32;
-        }
-        return 64;
-    }
-
     protected get rssiModel(): tf.LayersModel {
         return this.models.get('rssi').model;
     }
@@ -37,8 +28,11 @@ export class FingerprintAccuracy extends TensorFlowService {
 
     protected predictRSSI(position: Absolute3DPosition): SignalStrenghts {
         const signalStrengths: SignalStrenghts = {};
-        const prediction = this.rssiModel.predict(tf.tensor([[position.x, position.y, position.z ?? 0]])) as tf.Tensor;
+        const input = tf.tensor([[position.x, position.y, position.z ?? 0]]);
+        const prediction = this.rssiModel.predict(input) as tf.Tensor;
         const predictionData = Array.from(prediction.dataSync());
+        input.dispose();
+        prediction.dispose();
         const N = this.accessPoints.length;
         const strongest = this.options.minRSSI ?? -99;
         const weakest = this.options.maxRSSI ?? -96;

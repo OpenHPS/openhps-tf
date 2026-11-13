@@ -103,7 +103,7 @@ export class TensorFlowService extends Service {
     loadModel(model: TFModel): Promise<void> {
         return new Promise((resolve, reject) => {
             if (!model.fileOrUrl) {
-                reject(new Error(`Model ${model.name} does not have a file or URL`));
+                return reject(new Error(`Model ${model.name} does not have a file or URL`));
             }
             tf.loadLayersModel(model.fileOrUrl)
                 .then((layersModel) => {
